@@ -44,6 +44,7 @@
         <button class="nav" data-page="join">↪ <span>Bergabung Forum</span></button>
         <button class="nav" data-page="create">＋ <span>Buat Forum</span></button>
         <button class="nav" data-page="settings">⚙ <span>Pengaturan</span></button>
+        <button class="nav" data-page="contact">✉ <span>Hubungi Admin</span></button>
         <button class="nav hidden" id="adminNav" data-page="admin">♛ <span>Admin</span></button>
       </nav>
       <button id="logoutBtn" class="nav logout">↪ Keluar</button>
@@ -92,6 +93,7 @@
           <span class="eyebrow">ACCOUNT</span><h2>Pengaturan akun</h2>
           <form id="profileForm">
             <div class="two"><label>Username (tidak bisa diubah)<input id="settingsUsername" disabled></label><label>Nama tampilan<input id="settingsDisplayName" maxlength="30" required></label></div>
+            <div class="account-status"><span class="muted">Status akun</span><strong id="accountStatus">BIASA</strong><small id="accountStatusDetail" class="muted">Akun biasa</small></div>
             <button class="primary">Simpan nama</button>
           </form>
           <hr>
@@ -106,8 +108,22 @@
         </div>
       </section>
 
+      <section id="page-contact" class="page hidden">
+        <div class="form-card glass narrow">
+          <span class="eyebrow">PREMIUM</span><h2>Hubungi Admin</h2>
+          <p class="muted">Ingin membeli member Premium? Kirim permintaan ke admin. Admin akan melihat permintaan ini di panel dan memproses Premium untuk akunmu.</p>
+          <form id="supportForm">
+            <label>Pesan untuk admin<textarea id="supportMessage" maxlength="500" rows="5" placeholder="Contoh: Saya ingin membeli Premium 30 hari."></textarea></label>
+            <button class="primary wide">Kirim ke Admin</button>
+          </form>
+          <div class="notice">Tips: tulis durasi Premium yang kamu inginkan agar admin lebih cepat memprosesnya.</div>
+        </div>
+      </section>
+
       <section id="page-admin" class="page hidden">
         <div class="section-head"><div><span class="eyebrow">CONTROL CENTER</span><h2>Admin Panel</h2></div></div>
+        <div class="form-card glass" style="margin-bottom:15px"><h3>Aktivitas Forum</h3><p class="muted">Daftar seluruh forum yang ada. Untuk privasi, admin hanya melihat secret code forum.</p><div id="adminForumResults" class="notice">Belum dimuat.</div></div>
+        <div class="form-card glass" style="margin-bottom:15px"><h3>Permintaan Premium</h3><div id="supportResults" class="notice">Belum dimuat.</div></div>
         <div class="admin-grid">
           <div class="form-card glass"><h3>Kelola user</h3><form id="userSearchForm"><input id="userSearch" placeholder="Cari username"><button class="secondary wide">Cari</button></form><div id="userResults"></div></div>
           <div class="form-card glass"><h3>Berikan / cabut Premium</h3><form id="premiumForm"><input id="premiumUsername" placeholder="Username"><div class="two"><select id="premiumMode"><option value="grant">Berikan Premium</option><option value="revoke">Jadikan Biasa</option></select><input id="premiumDays" type="number" min="1" value="7" placeholder="Hari"></div><button class="primary wide">Terapkan</button></form></div>

@@ -30,6 +30,15 @@ service cloud.firestore {
       allow create, update, delete: if admin();
     }
 
+    match /supportRequests/{requestId} {
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid &&
+        request.resource.data.username is string && request.resource.data.message is string &&
+        request.resource.data.message.size() > 0 && request.resource.data.message.size() <= 500;
+      allow read: if admin();
+      allow update: if admin();
+      allow delete: if admin();
+    }
+
     match /forumCodes/{code} {
       allow read: if signedIn();
       allow create: if signedIn() &&

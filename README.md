@@ -42,3 +42,9 @@ lalu buka `http://localhost:8080`.
 
 ## Catatan desain
 File ini adalah aplikasi siap-deploy setelah Firebase config + rules dipasang. Sistem pembayaran Premium belum terhubung ke payment gateway; status Premium dikelola admin sesuai permintaan.
+
+### Tambahan versi ini
+- Pengaturan akun menampilkan status **ADMIN / PREMIUM / BIASA**.
+- Ada menu **Hubungi Admin** untuk mengirim permintaan pembelian Premium langsung ke Firestore.
+- Admin Panel menampilkan hingga 30 permintaan Premium terbaru dan bisa menandai permintaan selesai.
+- Fitur admin lama tetap dipertahankan: pencarian user, ban/unban, suspend 24 jam, grant/revoke Premium, dan grant/revoke admin.
