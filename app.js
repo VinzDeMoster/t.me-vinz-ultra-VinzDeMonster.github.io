@@ -29,17 +29,6 @@ const toast = msg => { $("toast").textContent = msg; $("toast").classList.add("s
 const esc = s => String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));
 const randomCode = () => Array.from(crypto.getRandomValues(new Uint8Array(8))).map(x=>"ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[x%32]).join("").match(/.{1,4}/g).join("-");
 const emailForUsername = u => `${u.trim().toLowerCase().replace(/[^a-z0-9._-]/g,"_")}@secretforum.local`;
-const firebaseError = err => {
-  const code = err?.code || "";
-  const map = {
-    "permission-denied":"Akses ditolak Firebase. Pastikan Firestore Rules sudah di-deploy dan akun admin sudah di-bootstrap.",
-    "failed-precondition":"Firestore belum siap atau membutuhkan index. Cek konfigurasi Firestore.",
-    "unavailable":"Firebase sedang tidak tersedia. Coba lagi.",
-    "already-exists":"Data sudah ada.",
-    "invalid-argument":"Data yang dikirim tidak valid."
-  };
-  return map[code] || String(err?.message||err).replace("Firebase: ","");
-};
 
 function showPage(name){
   document.querySelectorAll(".page").forEach(x=>x.classList.add("hidden"));
@@ -61,7 +50,8 @@ async function loadProfile(user){
   const snap=await getDoc(doc(db,"users",user.uid));
   if(!snap.exists()){ await signOut(auth); throw new Error("Profil user tidak ditemukan."); }
   const adminSnap=await getDoc(doc(db,"admins",user.uid));
-  profile={uid:user.uid,...snap.data(),isAdmin:adminSnap.exists() && adminSnap.data().enabled===true};
+  const data=snap.data();
+  profile={uid:user.uid,...data,isAdmin:adminSnap.exists()&&adminSnap.data().enabled===true};
   setLoggedInUI();
 }
 async function getUserByUsername(username){
@@ -85,59 +75,62 @@ $("authForm").onsubmit=async e=>{
     }
   }catch(err){ toast(err.message.replace("Firebase: ","")); }
 };
-$("profileForm").onsubmit=async e=>{e.preventDefault(); const name=$("settingsDisplayName").value.trim(); if(!name)return; try{await updateDoc(doc(db,"users",currentUser.uid),{displayName:name}); profile.displayName=name; setLoggedInUI(); toast("Nama berhasil diubah.");}catch(err){toast(firebaseError(err));}};
+$("profileForm").onsubmit=async e=>{e.preventDefault(); const name=$("settingsDisplayName").value.trim(); if(!name)return; await updateDoc(doc(db,"users",currentUser.uid),{displayName:name}); profile.displayName=name; setLoggedInUI(); toast("Nama berhasil diubah.");};
 $("passwordForm").onsubmit=async e=>{e.preventDefault(); try{await updatePassword(currentUser,$("newPassword").value); $("newPassword").value=""; toast("Password berhasil diubah.");}catch(err){toast("Demi keamanan, login ulang sebelum mengganti password.");}};
 $("createForm").onsubmit=async e=>{
   e.preventDefault();
   try{
-    const name=$("forumName").value.trim(), max=Number($("memberLimit").value), custom=$("secretCode").value.trim();
+    const name=$("forumName").value.trim(), max=Number($("memberLimit").value), custom=$("secretCode").value.trim().toUpperCase();
     if(!name)return toast("Nama forum wajib diisi.");
     if(max<2||max>20)return toast("Jumlah anggota harus 2–20.");
     const premium=profile.premiumUntil?.toMillis?.()>Date.now();
     if(custom&&!premium)return toast("Custom code hanya untuk Premium.");
     const secret=custom||randomCode();
-    const existing=await getDocs(query(collection(db,"forums"),where("secretCode","==",secret),limit(1)));
-    if(!existing.empty)return toast("Kode sudah dipakai, coba lagi.");
     const forumRef=doc(collection(db,"forums"));
-    await setDoc(forumRef,{name,maxMembers:max,secretCode:secret,ownerId:currentUser.uid,memberIds:[currentUser.uid],createdAt:serverTimestamp()});
-    await setDoc(doc(db,"forums",forumRef.id,"members",currentUser.uid),{displayName:profile.displayName,username:profile.username,role:"owner",joinedAt:serverTimestamp()});
-    $("createForm").reset();
-    toast("Forum dibuat. Kode: "+secret);
-    await loadForums();
-  }catch(err){toast(firebaseError(err));}
+    const codeRef=doc(db,"forumCodes",secret);
+    await runTransaction(db,async tx=>{
+      const codeSnap=await tx.get(codeRef);
+      if(codeSnap.exists())throw new Error("Kode sudah dipakai, coba kode lain.");
+      tx.set(forumRef,{name,maxMembers:max,secretCode:secret,ownerId:currentUser.uid,memberIds:[currentUser.uid],createdAt:serverTimestamp()});
+      tx.set(codeRef,{forumId:forumRef.id});
+      tx.set(doc(db,"forums",forumRef.id,"members",currentUser.uid),{displayName:profile.displayName,username:profile.username,role:"owner",joinedAt:serverTimestamp()});
+    });
+    $("createForm").reset(); toast("Forum dibuat. Kode: "+secret); loadForums();
+  }catch(err){ toast(err.message.replace("Firebase: ","")); }
 };
 $("joinForm").onsubmit=async e=>{
   e.preventDefault();
   try{
     const code=$("joinCode").value.trim().toUpperCase();
-    const s=await getDocs(query(collection(db,"forums"),where("secretCode","==",code),limit(1)));
-    if(s.empty)return toast("Secret code tidak ditemukan.");
-    const ref=s.docs[0].ref; const data=s.docs[0].data();
-    const memberIds=data.memberIds||[];
-    if(memberIds.includes(currentUser.uid)){openForum(ref.id,data);return}
-    if(memberIds.length>=data.maxMembers)return toast("Forum sudah penuh.");
+    if(!code)return toast("Masukkan secret code.");
+    const codeSnap=await getDoc(doc(db,"forumCodes",code));
+    if(!codeSnap.exists())return toast("Secret code tidak ditemukan.");
+    const forumId=codeSnap.data().forumId;
+    const ref=doc(db,"forums",forumId);
+    const s=await getDoc(ref);
+    if(!s.exists())return toast("Forum tidak ditemukan.");
+    const data=s.data(), existingMembers=data.memberIds||[];
+    if(existingMembers.includes(currentUser.uid)){openForum(forumId,data);return}
+    if(existingMembers.length>=data.maxMembers)return toast("Forum sudah penuh.");
     await runTransaction(db,async tx=>{
       const fresh=await tx.get(ref);
       if(!fresh.exists())throw new Error("Forum tidak ditemukan.");
-      const freshData=fresh.data();
-      const members=freshData.memberIds||[];
+      const freshData=fresh.data(), members=freshData.memberIds||[];
       if(members.includes(currentUser.uid))return;
       if(members.length>=freshData.maxMembers)throw new Error("Forum sudah penuh.");
       tx.update(ref,{memberIds:[...members,currentUser.uid]});
+      tx.set(doc(db,"forums",forumId,"members",currentUser.uid),{displayName:profile.displayName,username:profile.username,role:"member",joinedAt:serverTimestamp()});
     });
-    await setDoc(doc(db,"forums",ref.id,"members",currentUser.uid),{displayName:profile.displayName,username:profile.username,role:"member",joinedAt:serverTimestamp()});
-    const fresh=await getDoc(ref);
-    openForum(ref.id,fresh.data());
-  }catch(err){toast(firebaseError(err));}
+    const latest=await getDoc(ref);
+    openForum(forumId,latest.data());
+  }catch(err){ toast(err.message.replace("Firebase: ","")); }
 };
 async function loadForums(){
-  try{
-    const owned=await getDocs(query(collection(db,"forums"),where("ownerId","==",currentUser.uid)));
-    const joined=await getDocs(query(collection(db,"forums"),where("memberIds","array-contains",currentUser.uid)));
-    const map=new Map(); [...owned.docs,...joined.docs].forEach(d=>map.set(d.id,{id:d.id,...d.data()}));
-    $("forumList").innerHTML=[...map.values()].map(f=>`<div class="forum-card glass"><span class="eyebrow">PRIVATE FORUM</span><h3>${esc(f.name)}</h3><p class="muted">${(f.memberIds||[]).length}/${f.maxMembers} anggota</p><p class="code">${esc(f.secretCode)}</p><button class="secondary wide" data-open="${f.id}">Buka forum</button></div>`).join("")||`<div class="form-card glass"><h3>Belum ada forum</h3><p class="muted">Buat forum baru atau bergabung dengan secret code.</p></div>`;
-    document.querySelectorAll("[data-open]").forEach(b=>b.onclick=async()=>{try{const s=await getDoc(doc(db,"forums",b.dataset.open)); if(s.exists())openForum(s.id,s.data()); else toast("Forum tidak ditemukan.");}catch(err){toast(firebaseError(err));}});
-  }catch(err){$("forumList").innerHTML=`<div class="notice">${esc(firebaseError(err))}</div>`;}
+  const owned=await getDocs(query(collection(db,"forums"),where("ownerId","==",currentUser.uid)));
+  const joined=await getDocs(query(collection(db,"forums"),where("memberIds","array-contains",currentUser.uid)));
+  const map=new Map(); [...owned.docs,...joined.docs].forEach(d=>map.set(d.id,{id:d.id,...d.data()}));
+  $("forumList").innerHTML=[...map.values()].map(f=>`<div class="forum-card glass"><span class="eyebrow">PRIVATE FORUM</span><h3>${esc(f.name)}</h3><p class="muted">${f.memberIds.length}/${f.maxMembers} anggota</p><p class="code">${esc(f.secretCode)}</p><button class="secondary wide" data-open="${f.id}">Buka forum</button></div>`).join("")||`<div class="form-card glass"><h3>Belum ada forum</h3><p class="muted">Buat forum baru atau bergabung dengan secret code.</p></div>`;
+  document.querySelectorAll("[data-open]").forEach(b=>b.onclick=async()=>{const s=await getDoc(doc(db,"forums",b.dataset.open)); if(s.exists())openForum(s.id,s.data())});
 }
 function openForum(id,data){
   activeForum={id,...data}; showPage("forum"); $("activeForumName").textContent=data.name; $("activeForumMeta").textContent=`${data.memberIds.length}/${data.maxMembers} anggota • kode ${data.secretCode}`;
@@ -148,44 +141,11 @@ function openForum(id,data){
 }
 $("messageForm").onsubmit=async e=>{e.preventDefault();const input=$("messageInput"),text=input.value.trim();if(!text||!activeForum)return;await addDoc(collection(db,"forums",activeForum.id,"messages"),{uid:currentUser.uid,displayName:profile.displayName,text:text.slice(0,1000),createdAt:serverTimestamp()});input.value=""};
 
-$("userSearchForm").onsubmit=async e=>{
-  e.preventDefault();
-  try{
-    const u=await getUserByUsername($("userSearch").value);
-    if(!u)return $("userResults").innerHTML="<div class='notice'>User tidak ditemukan.</div>";
-    const a=await getDoc(doc(db,"admins",u.id));
-    const isAdmin=a.exists()&&a.data().enabled===true;
-    $("userResults").innerHTML=`<div class="notice"><b>${esc(u.displayName)}</b> @${esc(u.username)}<br>Premium: ${u.premiumUntil?.toMillis?.()>Date.now()?"aktif":"tidak"}<br>Admin: ${isAdmin?"ya":"tidak"}<br>Banned: ${u.banned?"ya":"tidak"}<div style="margin-top:10px;display:flex;gap:6px"><button class="secondary" onclick="adminToggleBan('${u.id}',${!u.banned})">${u.banned?"Unban":"Ban"}</button><button class="secondary" onclick="adminSuspend('${u.id}')">Suspend 24h</button></div></div>`;
-  }catch(err){toast(firebaseError(err));}
-};
-window.adminToggleBan=async(uid,value)=>{try{await updateDoc(doc(db,"users",uid),{banned:value});toast(value?"User dibanned.":"Ban dicabut.");}catch(err){toast(firebaseError(err));}};
-window.adminSuspend=async uid=>{try{await updateDoc(doc(db,"users",uid),{suspendedUntil:new Date(Date.now()+86400000)});toast("User disuspend 24 jam.");}catch(err){toast(firebaseError(err));}};
-$("premiumForm").onsubmit=async e=>{
-  e.preventDefault();
-  try{
-    const u=await getUserByUsername($("premiumUsername").value);
-    if(!u)return toast("User tidak ditemukan.");
-    const grant=$("premiumMode").value==="grant";
-    const days=Math.max(1,Number($("premiumDays").value)||1);
-    const until=grant?new Date(Date.now()+days*86400000):null;
-    await updateDoc(doc(db,"users",u.id),{premiumUntil:until});
-    if(u.id===currentUser.uid){profile.premiumUntil=until;setLoggedInUI();schedulePromo();}
-    toast(grant?"Premium diberikan.":"Premium dicabut.");
-  }catch(err){toast(firebaseError(err));}
-};
-$("adminForm").onsubmit=async e=>{
-  e.preventDefault();
-  try{
-    const u=await getUserByUsername($("adminUsername").value);
-    if(!u)return toast("User tidak ditemukan.");
-    const grant=$("adminMode").value==="grant";
-    // Update users first while the current admin privilege is still active.
-    await updateDoc(doc(db,"users",u.id),{isAdmin:grant});
-    await setDoc(doc(db,"admins",u.id),{uid:u.id,username:u.username,enabled:grant,updatedAt:serverTimestamp()},{merge:true});
-    if(u.id===currentUser.uid){profile.isAdmin=grant;setLoggedInUI();}
-    toast(grant?"Admin diberikan.":"Admin dicabut.");
-  }catch(err){toast(firebaseError(err));}
-};
+$("userSearchForm").onsubmit=async e=>{e.preventDefault();const u=await getUserByUsername($("userSearch").value);$("userResults").innerHTML=u?`<div class="notice"><b>${esc(u.displayName)}</b> @${esc(u.username)}<br>Premium: ${u.premiumUntil?.toMillis?.()>Date.now()?"aktif":"tidak"}<br>Admin: ${u.isAdmin?"ya":"tidak"}<br>Banned: ${u.banned?"ya":"tidak"}<div style="margin-top:10px;display:flex;gap:6px"><button class="secondary" onclick="adminToggleBan('${u.id}',${!u.banned})">${u.banned?"Unban":"Ban"}</button><button class="secondary" onclick="adminSuspend('${u.id}')">Suspend 24h</button></div></div>`:"<div class='notice'>User tidak ditemukan.</div>"};
+window.adminToggleBan=async(uid,value)=>{try{await updateDoc(doc(db,"users",uid),{banned:value});toast(value?"User dibanned.":"Ban dicabut.");}catch(err){toast(err.message.replace("Firebase: ",""));}};
+window.adminSuspend=async uid=>{try{await updateDoc(doc(db,"users",uid),{suspendedUntil:new Date(Date.now()+86400000)});toast("User disuspend 24 jam.");}catch(err){toast(err.message.replace("Firebase: ",""));}};
+$("premiumForm").onsubmit=async e=>{e.preventDefault();try{const u=await getUserByUsername($("premiumUsername").value);if(!u)return toast("User tidak ditemukan.");const grant=$("premiumMode").value==="grant";const days=Number($("premiumDays").value);if(grant&&(!Number.isFinite(days)||days<=0))return toast("Durasi Premium tidak valid.");const until=grant?new Date(Date.now()+days*86400000):null;await updateDoc(doc(db,"users",u.id),{premiumUntil:until});toast(grant?"Premium diberikan.":"Premium dicabut.");}catch(err){toast(err.message.replace("Firebase: ",""));}};
+$("adminForm").onsubmit=async e=>{e.preventDefault();try{const u=await getUserByUsername($("adminUsername").value);if(!u)return toast("User tidak ditemukan.");const grant=$("adminMode").value==="grant";await setDoc(doc(db,"admins",u.id),{uid:u.id,username:u.username,enabled:grant,updatedAt:serverTimestamp()},{merge:true});await updateDoc(doc(db,"users",u.id),{isAdmin:grant});toast(grant?"Admin diberikan.":"Admin dicabut.");}catch(err){toast(err.message.replace("Firebase: ",""));}};
 let promoTimer=null;
 function schedulePromo(){clearInterval(promoTimer);promoTimer=setInterval(()=>{if(profile&&!($("promo").classList.contains("hidden")))return;if(profile&&!profile.isAdmin){$("promo").classList.remove("hidden");setTimeout(()=>$("promo").classList.add("hidden"),5000)}},600000)}
 $("promoClose").onclick=()=>$("promo").classList.add("hidden");
