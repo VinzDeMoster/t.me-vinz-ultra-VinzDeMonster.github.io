@@ -23,7 +23,7 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 const $ = id => document.getElementById(id);
-let currentUser = null, profile = null, activeForum = null, unsubscribeMessages = null, authMode = "login";
+let currentUser = null, profile = null, activeForum = null, unsubscribeMessages = null, unsubscribeProfile = null, authMode = "login";
 
 const toast = msg => { $("toast").textContent = msg; $("toast").classList.add("show"); setTimeout(()=>$("toast").classList.remove("show"),2500); };
 const esc = s => String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));
@@ -63,7 +63,33 @@ async function loadProfile(user){
   if(!snap.exists()){ await signOut(auth); throw new Error("Profil user tidak ditemukan."); }
   const adminSnap=await getDoc(doc(db,"admins",user.uid));
   const data=snap.data();
-  profile={uid:user.uid,...data,isAdmin:adminSnap.exists()&&adminSnap.data().enabled===true};
+  const isAdmin=adminSnap.exists()&&adminSnap.data().enabled===true;
+  const suspendedUntil=premiumUntilMillis(data.suspendedUntil);
+  if(!isAdmin && data.banned===true){
+    await signOut(auth);
+    throw new Error("Akun kamu telah dibanned oleh admin.");
+  }
+  if(!isAdmin && suspendedUntil>Date.now()){
+    await signOut(auth);
+    throw new Error("Akun kamu sedang disuspend sampai "+new Date(suspendedUntil).toLocaleString("id-ID")+".");
+  }
+  profile={uid:user.uid,...data,isAdmin};
+  if(unsubscribeProfile)unsubscribeProfile();
+  unsubscribeProfile=onSnapshot(doc(db,"users",user.uid),async s=>{
+    if(!s.exists())return;
+    const latest=s.data();
+    const until=premiumUntilMillis(latest.suspendedUntil);
+    if(!profile.isAdmin && (latest.banned===true || until>Date.now())){
+      const reason=latest.banned===true?"Akun kamu telah dibanned oleh admin.":"Akun kamu sedang disuspend sampai "+new Date(until).toLocaleString("id-ID")+".";
+      if(unsubscribeProfile)unsubscribeProfile();
+      unsubscribeProfile=null;
+      await signOut(auth);
+      toast(reason);
+      return;
+    }
+    profile={...profile,...latest};
+    setLoggedInUI();
+  });
   setLoggedInUI();
 }
 async function getUserByUsername(username){
@@ -149,9 +175,9 @@ function openForum(id,data){
   $("copyCodeBtn").onclick=()=>navigator.clipboard.writeText(data.secretCode).then(()=>toast("Kode disalin."));
   if(unsubscribeMessages)unsubscribeMessages();
   const q=query(collection(db,"forums",id,"messages"),orderBy("createdAt","asc"));
-  unsubscribeMessages=onSnapshot(q,s=>{const box=$("messages");box.innerHTML=s.docs.map(d=>{const m=d.data(), me=m.uid===currentUser.uid; return `<div class="msg ${me?"me":""}"><div class="msg-name">${esc(m.displayName||"User")}</div><div>${esc(m.text)}</div><div class="msg-time">${m.createdAt?.toDate?.().toLocaleString("id-ID")||"baru saja"}</div></div>`}).join("");box.scrollTop=box.scrollHeight});
+  unsubscribeMessages=onSnapshot(q,s=>{const box=$("messages");box.innerHTML=s.docs.map(d=>{const m=d.data(), me=m.uid===currentUser.uid; const verified=m.isAdmin?'<span class="verified" title="Admin terverifikasi" aria-label="Admin terverifikasi">✓</span>':''; return `<div class="msg ${me?"me":""}"><div class="msg-name">${esc(m.displayName||"User")} ${verified}</div><div>${esc(m.text)}</div><div class="msg-time">${m.createdAt?.toDate?.().toLocaleString("id-ID")||"baru saja"}</div></div>`}).join("");box.scrollTop=box.scrollHeight});
 }
-$("messageForm").onsubmit=async e=>{e.preventDefault();const input=$("messageInput"),text=input.value.trim();if(!text||!activeForum)return;await addDoc(collection(db,"forums",activeForum.id,"messages"),{uid:currentUser.uid,displayName:profile.displayName,text:text.slice(0,1000),createdAt:serverTimestamp()});input.value=""};
+$("messageForm").onsubmit=async e=>{e.preventDefault();const input=$("messageInput"),text=input.value.trim();if(!text||!activeForum)return;await addDoc(collection(db,"forums",activeForum.id,"messages"),{uid:currentUser.uid,displayName:profile.displayName,isAdmin:profile.isAdmin===true,text:text.slice(0,1000),createdAt:serverTimestamp()});input.value=""};
 
 $("supportForm").onsubmit=async e=>{
   e.preventDefault();
