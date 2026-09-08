@@ -88,7 +88,7 @@ service cloud.firestore {
           request.resource.data.text.size() > 0 &&
           request.resource.data.text.size() <= 1000 &&
           request.resource.data.isAdmin == admin() &&
-          request.auth.uid in get(/databases/$(database)/documents/forums/$(forumId)).data.memberIds;
+          (admin() || request.auth.uid in get(/databases/$(database)/documents/forums/$(forumId)).data.memberIds);
         allow update, delete: if admin() || (activeUser() && resource.data.uid == request.auth.uid);
       }
     }
