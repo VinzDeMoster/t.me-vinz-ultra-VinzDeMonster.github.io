@@ -1,0 +1,57 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function self(uid) { return signedIn() && request.auth.uid == uid; }
+    function admin() {
+      return signedIn() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.enabled == true;
+    }
+
+    match /users/{uid} {
+      allow read: if self(uid) || admin();
+      allow create: if self(uid);
+      allow update: if admin() || (
+        self(uid) &&
+        request.resource.data.username == resource.data.username &&
+        request.resource.data.isAdmin == resource.data.isAdmin &&
+        request.resource.data.banned == resource.data.banned
+      );
+      allow delete: if admin();
+    }
+
+    match /admins/{uid} {
+      allow read: if admin() || self(uid);
+      allow create, update, delete: if admin();
+    }
+
+    match /forums/{forumId} {
+      allow read: if signedIn() && (request.auth.uid in resource.data.memberIds || admin());
+      allow create: if signedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update: if signedIn() && (
+        admin() ||
+        resource.data.ownerId == request.auth.uid ||
+        request.auth.uid in resource.data.memberIds
+      );
+      allow delete: if admin() || (signedIn() && resource.data.ownerId == request.auth.uid);
+
+      match /members/{uid} {
+        allow read: if signedIn() && (request.auth.uid == uid || admin());
+        allow create: if signedIn() && request.auth.uid == uid;
+        allow update, delete: if admin() || self(uid);
+      }
+
+      match /messages/{messageId} {
+        allow read: if signedIn() && (request.auth.uid in get(/databases/$(database)/documents/forums/$(forumId)).data.memberIds || admin());
+        allow create: if signedIn() &&
+          request.resource.data.uid == request.auth.uid &&
+          request.resource.data.text is string &&
+          request.resource.data.text.size() > 0 &&
+          request.resource.data.text.size() <= 1000 &&
+          request.auth.uid in get(/databases/$(database)/documents/forums/$(forumId)).data.memberIds;
+        allow update, delete: if admin() || (signedIn() && resource.data.uid == request.auth.uid);
+      }
+    }
+  }
+}
