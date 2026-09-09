@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updatePassword } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, collection, query, where, orderBy, onSnapshot, getDocs, serverTimestamp, runTransaction, limit } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, collection, query, where, orderBy, onSnapshot, getDocs, serverTimestamp, runTransaction, limit, deleteDoc } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
 
 /*
   1) Buat Firebase project.
@@ -34,6 +34,15 @@ const premiumUntilMillis = value => {
   return 0;
 };
 const isPremiumActive = value => premiumUntilMillis(value) > Date.now();
+const premiumBadgeLevel = count => {
+  const n = Number(count || 0);
+  if (n >= 4) return "green";
+  if (n === 3) return "pink";
+  if (n === 2) return "purple";
+  if (n === 1) return "red";
+  return "";
+};
+const premiumBadgeHTML = level => level ? `<span class="premium-verified ${level}" title="Premium ${level === "red" ? "Lv. 1" : level === "purple" ? "Lv. 2" : level === "pink" ? "Lv. 3" : "Lv. 4+"}" aria-label="Badge Premium"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.2 16.7 4.8 12.3l-1.9 1.9 6.3 6.3L21.2 8.5l-1.9-1.9z"/></svg></span>` : "";
 const randomCode = () => Array.from(crypto.getRandomValues(new Uint8Array(8))).map(x=>"ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[x%32]).join("").match(/.{1,4}/g).join("-");
 const emailForUsername = u => `${u.trim().toLowerCase().replace(/[^a-z0-9._-]/g,"_")}@secretforum.local`;
 
@@ -73,7 +82,7 @@ async function loadProfile(user){
     await signOut(auth);
     throw new Error("Akun kamu sedang disuspend sampai "+new Date(suspendedUntil).toLocaleString("id-ID")+".");
   }
-  profile={uid:user.uid,...data,isAdmin};
+  profile={uid:user.uid,...data,premiumPurchases:Number(data.premiumPurchases||0),isAdmin};
   if(unsubscribeProfile)unsubscribeProfile();
   unsubscribeProfile=onSnapshot(doc(db,"users",user.uid),async s=>{
     if(!s.exists())return;
@@ -87,7 +96,7 @@ async function loadProfile(user){
       toast(reason);
       return;
     }
-    profile={...profile,...latest};
+    profile={...profile,...latest,premiumPurchases:Number(latest.premiumPurchases||0)};
     setLoggedInUI();
   });
   setLoggedInUI();
@@ -106,7 +115,7 @@ $("authForm").onsubmit=async e=>{
     if(authMode==="register"){
       const displayName=$("authDisplayName").value.trim()||username;
       const cred=await createUserWithEmailAndPassword(auth,emailForUsername(username),password);
-      await setDoc(doc(db,"users",cred.user.uid),{username,usernameLower:username.toLowerCase(),displayName,premiumUntil:null,isAdmin:false,banned:false,suspendedUntil:null,createdAt:serverTimestamp()});
+      await setDoc(doc(db,"users",cred.user.uid),{username,usernameLower:username.toLowerCase(),displayName,premiumUntil:null,premiumPurchases:0,isAdmin:false,banned:false,suspendedUntil:null,createdAt:serverTimestamp()});
       toast("Akun berhasil dibuat.");
     }else{
       await signInWithEmailAndPassword(auth,emailForUsername(username),password);
@@ -133,7 +142,7 @@ $("createForm").onsubmit=async e=>{
       tx.set(codeRef,{forumId:forumRef.id});
       tx.set(doc(db,"forums",forumRef.id,"members",currentUser.uid),{displayName:profile.displayName,username:profile.username,role:"owner",joinedAt:serverTimestamp()});
     });
-    $("createForm").reset(); toast("Forum dibuat. Kode: "+secret); loadForums();
+    $("createForm").reset(); toast("Forum dibuat. Kode: "+secret,8000); loadForums();
   }catch(err){ toast(err.message.replace("Firebase: ","")); }
 };
 $("joinForm").onsubmit=async e=>{
@@ -175,9 +184,36 @@ function openForum(id,data){
   $("copyCodeBtn").onclick=()=>navigator.clipboard.writeText(data.secretCode).then(()=>toast("Kode disalin."));
   if(unsubscribeMessages)unsubscribeMessages();
   const q=query(collection(db,"forums",id,"messages"),orderBy("createdAt","asc"));
-  unsubscribeMessages=onSnapshot(q,s=>{const box=$("messages");box.innerHTML=s.docs.map(d=>{const m=d.data(), me=m.uid===currentUser.uid; const verified=m.isAdmin?'<span class="verified" title="Admin terverifikasi" aria-label="Admin terverifikasi"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.2 16.7 4.8 12.3l-1.9 1.9 6.3 6.3L21.2 8.5l-1.9-1.9z"/></svg></span>':''; return `<div class="msg ${me?"me":""}"><div class="msg-name">${esc(m.displayName||"User")} ${verified}</div><div>${esc(m.text)}</div><div class="msg-time">${m.createdAt?.toDate?.().toLocaleString("id-ID")||"baru saja"}</div></div>`}).join("");box.scrollTop=box.scrollHeight});
+  unsubscribeMessages=onSnapshot(q,s=>{
+    const box=$("messages");
+    box.innerHTML=s.docs.map(d=>{
+      const m=d.data(), me=m.uid===currentUser.uid, canDelete=me||profile.isAdmin===true;
+      const verified=m.isAdmin?'<span class="verified" title="Admin terverifikasi" aria-label="Admin terverifikasi"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.2 16.7 4.8 12.3l-1.9 1.9 6.3 6.3L21.2 8.5l-1.9-1.9z"/></svg></span>':'';
+      const premiumBadge=premiumBadgeHTML(premiumBadgeLevel(m.premiumPurchases));
+      const deleteButton=canDelete?`<button class="msg-delete" data-delete-message="${d.id}" title="Hapus pesan" aria-label="Hapus pesan">🗑</button>`:"";
+      return `<div class="msg ${me?"me":""}"><div class="msg-head"><div class="msg-name">${esc(m.displayName||"User")} ${verified} ${premiumBadge}</div>${deleteButton}</div><div class="msg-text">${esc(m.text).replace(/\n/g,"<br>")}</div><div class="msg-time">${m.createdAt?.toDate?.().toLocaleString("id-ID")||"baru saja"}</div></div>`
+    }).join("");
+    box.querySelectorAll("[data-delete-message]").forEach(btn=>btn.onclick=async()=>{
+      if(!activeForum)return;
+      if(!confirm("Hapus pesan ini?"))return;
+      try{await deleteDoc(doc(db,"forums",activeForum.id,"messages",btn.dataset.deleteMessage));toast("Pesan dihapus.");}
+      catch(err){toast(err.message.replace("Firebase: ",""));}
+    });
+    box.scrollTop=box.scrollHeight;
+  });
 }
-$("messageForm").onsubmit=async e=>{e.preventDefault();const input=$("messageInput"),text=input.value.trim();if(!text||!activeForum)return;await addDoc(collection(db,"forums",activeForum.id,"messages"),{uid:currentUser.uid,displayName:profile.displayName,isAdmin:profile.isAdmin===true,text:text.slice(0,1000),createdAt:serverTimestamp()});input.value=""};
+$("messageForm").onsubmit=async e=>{
+  e.preventDefault();
+  const input=$("messageInput"),text=input.value.trim();
+  if(!text||!activeForum)return;
+  try{
+    await addDoc(collection(db,"forums",activeForum.id,"messages"),{uid:currentUser.uid,displayName:profile.displayName,isAdmin:profile.isAdmin===true,premiumPurchases:Number(profile.premiumPurchases||0),text:text.slice(0,1000),createdAt:serverTimestamp()});
+    input.value=""; input.style.height="auto";
+  }catch(err){toast(err.message.replace("Firebase: ",""));}
+};
+$("messageInput").addEventListener("input",()=>{
+  const el=$("messageInput"); el.style.height="auto"; el.style.height=Math.min(el.scrollHeight,150)+"px";
+});
 
 $("supportForm").onsubmit=async e=>{
   e.preventDefault();
@@ -209,10 +245,32 @@ async function loadSupportRequests(){
 }
 window.adminCloseSupport=async id=>{try{await updateDoc(doc(db,"supportRequests",id),{status:"done",handledAt:serverTimestamp()});toast("Permintaan ditandai selesai.");loadSupportRequests();}catch(err){toast(err.message.replace("Firebase: ",""));}};
 
-$("userSearchForm").onsubmit=async e=>{e.preventDefault();const u=await getUserByUsername($("userSearch").value);$("userResults").innerHTML=u?`<div class="notice"><b>${esc(u.displayName)}</b> @${esc(u.username)}<br>Premium: ${isPremiumActive(u.premiumUntil)?"aktif":"tidak"}<br>Admin: ${u.isAdmin?"ya":"tidak"}<br>Banned: ${u.banned?"ya":"tidak"}<div style="margin-top:10px;display:flex;gap:6px"><button class="secondary" onclick="adminToggleBan('${u.id}',${!u.banned})">${u.banned?"Unban":"Ban"}</button><button class="secondary" onclick="adminSuspend('${u.id}')">Suspend 24h</button></div></div>`:"<div class='notice'>User tidak ditemukan.</div>"};
+$("userSearchForm").onsubmit=async e=>{e.preventDefault();const u=await getUserByUsername($("userSearch").value);$("userResults").innerHTML=u?`<div class="notice"><b>${esc(u.displayName)}</b> @${esc(u.username)}<br>Premium: ${isPremiumActive(u.premiumUntil)?"aktif":"tidak"}<br>Pembelian Premium: ${Number(u.premiumPurchases||0)}<br>Admin: ${u.isAdmin?"ya":"tidak"}<br>Banned: ${u.banned?"ya":"tidak"}<div style="margin-top:10px;display:flex;gap:6px"><button class="secondary" onclick="adminToggleBan('${u.id}',${!u.banned})">${u.banned?"Unban":"Ban"}</button><button class="secondary" onclick="adminSuspend('${u.id}')">Suspend 24h</button></div></div>`:"<div class='notice'>User tidak ditemukan.</div>"};
 window.adminToggleBan=async(uid,value)=>{try{await updateDoc(doc(db,"users",uid),{banned:value});toast(value?"User dibanned.":"Ban dicabut.");}catch(err){toast(err.message.replace("Firebase: ",""));}};
 window.adminSuspend=async uid=>{try{await updateDoc(doc(db,"users",uid),{suspendedUntil:new Date(Date.now()+86400000)});toast("User disuspend 24 jam.");}catch(err){toast(err.message.replace("Firebase: ",""));}};
-$("premiumForm").onsubmit=async e=>{e.preventDefault();try{const u=await getUserByUsername($("premiumUsername").value);if(!u)return toast("User tidak ditemukan.");const grant=$("premiumMode").value==="grant";const days=Number($("premiumDays").value);if(grant&&(!Number.isFinite(days)||days<=0))return toast("Durasi Premium tidak valid.");const until=grant?new Date(Date.now()+days*86400000):null;await updateDoc(doc(db,"users",u.id),{premiumUntil:until});toast(grant?"Premium diberikan.":"Premium dicabut.");}catch(err){toast(err.message.replace("Firebase: ",""));}};
+$("premiumForm").onsubmit=async e=>{
+  e.preventDefault();
+  try{
+    const u=await getUserByUsername($("premiumUsername").value);
+    if(!u)return toast("User tidak ditemukan.");
+    const grant=$("premiumMode").value==="grant";
+    const days=Number($("premiumDays").value);
+    if(grant&&(!Number.isFinite(days)||days<=0))return toast("Durasi Premium tidak valid.");
+    const ref=doc(db,"users",u.id);
+    if(grant){
+      const until=new Date(Date.now()+days*86400000);
+      await runTransaction(db,async tx=>{
+        const snap=await tx.get(ref);
+        if(!snap.exists())throw new Error("User tidak ditemukan.");
+        const count=Number(snap.data().premiumPurchases||0)+1;
+        tx.update(ref,{premiumUntil:until,premiumPurchases:count});
+      });
+    }else{
+      await updateDoc(ref,{premiumUntil:null});
+    }
+    toast(grant?"Premium diberikan. Badge Premium bertambah.":"Premium dicabut.");
+  }catch(err){toast(err.message.replace("Firebase: ",""));}
+};
 $("adminForm").onsubmit=async e=>{e.preventDefault();try{const u=await getUserByUsername($("adminUsername").value);if(!u)return toast("User tidak ditemukan.");const grant=$("adminMode").value==="grant";await setDoc(doc(db,"admins",u.id),{uid:u.id,username:u.username,enabled:grant,updatedAt:serverTimestamp()},{merge:true});await updateDoc(doc(db,"users",u.id),{isAdmin:grant});toast(grant?"Admin diberikan.":"Admin dicabut.");}catch(err){toast(err.message.replace("Firebase: ",""));}};
 let promoTimer=null;
 function schedulePromo(){clearInterval(promoTimer);promoTimer=setInterval(()=>{if(profile&&!($("promo").classList.contains("hidden")))return;if(profile&&!profile.isAdmin){$("promo").classList.remove("hidden");setTimeout(()=>$("promo").classList.add("hidden"),5000)}},600000)}

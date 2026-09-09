@@ -48,3 +48,16 @@ File ini adalah aplikasi siap-deploy setelah Firebase config + rules dipasang. S
 - Ada menu **Hubungi Admin** untuk mengirim permintaan pembelian Premium langsung ke Firestore.
 - Admin Panel menampilkan hingga 30 permintaan Premium terbaru dan bisa menandai permintaan selesai.
 - Fitur admin lama tetap dipertahankan: pencarian user, ban/unban, suspend 24 jam, grant/revoke Premium, dan grant/revoke admin.
+
+## Perubahan v8
+- Hapus pesan: pemilik pesan dan admin dapat menghapus pesan.
+- Input pesan menggunakan textarea seperti chat modern, mendukung baris baru.
+- Kode secret setelah membuat forum ditampilkan lebih lama (8 detik).
+- Badge Premium otomatis berdasarkan `premiumPurchases`: 1=merah, 2=ungu, 3=pink, 4+=hijau.
+- Saat admin memberikan Premium, `premiumPurchases` bertambah 1.
+- Pesan menyimpan jumlah pembelian Premium pengirim agar badge tampil konsisten.
+- Admin tetap mendapat centang biru terverifikasi.
+- Rules pesan memvalidasi `premiumPurchases` milik akun sehingga badge tidak mudah dipalsukan.
+- Rules akses forum/admin diperjelas agar admin dapat membaca daftar forum.
+
+**Penting:** deploy `firestore.rules` terbaru bersama file website.
