@@ -257,14 +257,6 @@ $("paidBtn").onclick=async()=>{
     setTimeout(()=>{ $("paymentLoading").classList.add("hidden"); $("paidBtn").disabled=false; showPage("home"); toast("Pembayaran dikirim untuk verifikasi admin."); },1800);
   }catch(err){$("paidBtn").disabled=false;$("paymentLoading").classList.add("hidden");toast(err.message.replace("Firebase: ",""));}
 };
-$("supportForm").onsubmit=async e=>{
-  e.preventDefault();
-  const message=$("supportMessage").value.trim()||"Saya ingin membeli Premium.";
-  try{
-    await addDoc(collection(db,"supportRequests"),{uid:currentUser.uid,username:profile.username,displayName:profile.displayName,message:message.slice(0,500),type:"premium",status:"open",createdAt:serverTimestamp()});
-    $("supportMessage").value=""; toast("Permintaan sudah dikirim ke admin.");
-  }catch(err){toast(err.message.replace("Firebase: ",""));}
-};
 async function loadAdminForums(){
   if(!profile?.isAdmin)return;
   try{
