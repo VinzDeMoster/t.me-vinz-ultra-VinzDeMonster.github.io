@@ -110,25 +110,13 @@
 
       <section id="page-contact" class="page hidden">
         <div class="form-card glass narrow">
-          <span class="eyebrow">PREMIUM</span><h2>Upgrade Premium</h2>
-          <p class="muted">Pilih paket Premium. Setelah memilih, kamu akan diarahkan ke halaman pembayaran.</p>
-          <div class="premium-plans">
-            <div class="plan-card"><h3>1 Minggu</h3><p class="muted">Premium 7 hari</p><button class="primary wide" data-plan="7 hari">Beli Sekarang</button></div>
-            <div class="plan-card"><h3>1 Bulan</h3><p class="muted">Premium 30 hari</p><button class="primary wide" data-plan="30 hari">Beli Sekarang</button></div>
-            <div class="plan-card"><h3>1 Tahun</h3><p class="muted">Premium 365 hari</p><button class="primary wide" data-plan="365 hari">Beli Sekarang</button></div>
-          </div>
-        </div>
-      </section>
-      <section id="page-payment" class="page hidden">
-        <div class="form-card glass narrow payment-card">
-          <button class="icon" data-page-go="contact">←</button>
-          <span class="eyebrow">PAYMENT</span><h2>Pembayaran Premium</h2>
-          <p id="paymentPlanText" class="muted">Paket Premium</p>
-          <div class="payment-box"><h3>Scan QR / Transfer</h3><div class="qr-placeholder"><div class="qr-grid">▦</div><span>QRIS / QR Pembayaran</span></div>
-            <div class="notice"><b>Nomor rekening</b><br><span id="paymentAccount">ISI NOMOR REKENING / QRIS DI app.js</span><br><small class="muted">Ganti informasi pembayaran di bagian PAYMENT_ACCOUNT dan PAYMENT_QR_TEXT pada app.js.</small></div>
-          </div>
-          <button class="primary wide" id="paidBtn">Saya Sudah Bayar</button>
-          <div id="paymentLoading" class="payment-loading hidden"><span class="spinner"></span> Memproses pembayaran...</div>
+          <span class="eyebrow">PREMIUM</span><h2>Hubungi Admin</h2>
+          <p class="muted">Ingin membeli member Premium? Kirim permintaan ke admin. Admin akan melihat permintaan ini di panel dan memproses Premium untuk akunmu.</p>
+          <form id="supportForm">
+            <label>Pesan untuk admin<textarea id="supportMessage" maxlength="500" rows="5" placeholder="Contoh: Saya ingin membeli Premium 30 hari."></textarea></label>
+            <button class="primary wide">Kirim ke Admin</button>
+          </form>
+          <div class="notice">Tips: tulis durasi Premium yang kamu inginkan agar admin lebih cepat memprosesnya dan bergabung ke forum dengan secret kode BUYER-PREMIUM untuk melakukan transaksi.</div>
         </div>
       </section>
 
@@ -145,9 +133,8 @@
 
       <section id="page-forum" class="page hidden">
         <div class="forum-head glass">
-          <button class="icon" data-page-go="home">←</button><div><h2 id="activeForumName">Forum</h2><p id="activeForumMeta" class="muted"></p></div><button id="ownerOnlyToggle" class="secondary hidden">💬 Semua anggota</button><button id="copyCodeBtn" class="secondary">Salin kode</button>
+          <button class="icon" data-page-go="home">←</button><div><h2 id="activeForumName">Forum</h2><p id="activeForumMeta" class="muted"></p></div><button id="copyCodeBtn" class="secondary">Salin kode</button>
         </div>
-        <div id="forumMembers" class="members glass"></div>
         <div id="messages" class="messages glass"></div>
         <form id="messageForm" class="composer glass"><textarea id="messageInput" maxlength="1000" rows="1" placeholder="Tulis pesan teks..." autocomplete="off"></textarea><button class="primary">Kirim</button></form>
       </section>
