@@ -39,7 +39,7 @@ service cloud.firestore {
         request.resource.data.banned == resource.data.banned &&
         request.resource.data.premiumUntil == resource.data.premiumUntil &&
         request.resource.data.suspendedUntil == resource.data.suspendedUntil &&
-        request.resource.data.premiumPurchases == resource.data.premiumPurchases &&
+        request.resource.data.get('premiumPurchases',0) == resource.data.get('premiumPurchases',0) &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName'])
       );
 

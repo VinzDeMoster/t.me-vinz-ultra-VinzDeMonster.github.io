@@ -141,8 +141,8 @@
 
       <section id="page-admin" class="page hidden">
         <div class="section-head"><div><span class="eyebrow">CONTROL CENTER</span><h2>Admin Panel</h2></div></div>
-        <div class="form-card glass" style="margin-bottom:15px"><h3>Aktivitas Forum</h3><p class="muted">Daftar seluruh forum yang ada. Untuk privasi, admin hanya melihat secret code forum.</p><div id="adminForumResults" class="notice">Belum dimuat.</div></div>
-        <div class="form-card glass" style="margin-bottom:15px"><h3>Permintaan Premium</h3><div id="supportResults" class="notice">Belum dimuat.</div></div>
+        <div class="form-card glass" style="margin-bottom:15px"><div class="section-head"><div><h3>Aktivitas Forum</h3><p class="muted">Daftar seluruh forum yang ada. Untuk privasi, admin hanya melihat secret code forum.</p></div><button class="secondary" id="refreshForumsBtn" type="button">Refresh</button></div><div id="adminForumResults" class="notice">Belum dimuat.</div></div>
+        <div class="form-card glass" style="margin-bottom:15px"><div class="section-head"><div><h3>Permintaan Premium</h3><p class="muted">Verifikasi pembayaran dan buat kode aktivasi untuk pembeli.</p></div><button class="secondary" id="refreshSupportBtn" type="button">Refresh</button></div><div id="supportResults" class="notice">Belum dimuat.</div></div>
         <div class="admin-grid">
           <div class="form-card glass"><h3>Kelola user</h3><form id="userSearchForm"><input id="userSearch" placeholder="Cari username"><button class="secondary wide">Cari</button></form><div id="userResults"></div></div>
           <div class="form-card glass"><h3>Berikan / cabut Premium</h3><form id="premiumForm"><input id="premiumUsername" placeholder="Username"><div class="two"><select id="premiumMode"><option value="grant">Berikan Premium</option><option value="revoke">Jadikan Biasa</option></select><input id="premiumDays" type="number" min="1" value="7" placeholder="Hari"></div><button class="primary wide">Terapkan</button></form></div>
