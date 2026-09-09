@@ -17,6 +17,16 @@ service cloud.firestore {
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.suspendedUntil <= request.time);
     }
     function allowedUser() { return admin() || activeUser(); }
+    function premiumActive() {
+      let u = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      return ("premiumUntil" in u) && (
+        (u.premiumUntil is timestamp && u.premiumUntil > request.time) ||
+        (u.premiumUntil is number && u.premiumUntil > request.time.toMillis())
+      );
+    }
+    function forumOwner(forumId) {
+      return activeUser() && get(/databases/$(database)/documents/forums/$(forumId)).data.ownerId == request.auth.uid;
+    }
 
     match /users/{uid} {
       allow read: if self(uid) || admin();
@@ -29,6 +39,7 @@ service cloud.firestore {
         request.resource.data.banned == resource.data.banned &&
         request.resource.data.premiumUntil == resource.data.premiumUntil &&
         request.resource.data.suspendedUntil == resource.data.suspendedUntil &&
+        request.resource.data.premiumPurchases == resource.data.premiumPurchases &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName'])
       );
       allow delete: if admin();
@@ -41,56 +52,77 @@ service cloud.firestore {
 
     match /supportRequests/{requestId} {
       allow create: if activeUser() && request.resource.data.uid == request.auth.uid &&
-        request.resource.data.username is string && request.resource.data.message is string &&
-        request.resource.data.message.size() > 0 && request.resource.data.message.size() <= 500;
-      allow read: if admin();
-      allow update: if admin();
-      allow delete: if admin();
+        request.resource.data.username is string &&
+        request.resource.data.type is string;
+      allow read, update, delete: if admin();
     }
 
     match /forumCodes/{code} {
       allow read: if allowedUser();
-      allow create: if activeUser() &&
-        request.resource.data.forumId is string;
+      allow create: if activeUser() && request.resource.data.forumId is string;
       allow update, delete: if admin();
     }
 
     match /forums/{forumId} {
-      allow read: if admin() || (allowedUser() && (request.auth.uid in resource.data.memberIds || get(/databases/$(database)/documents/forumCodes/$(resource.data.secretCode)).data.forumId == forumId));
-      allow create: if activeUser() && request.resource.data.ownerId == request.auth.uid;
+      allow read: if admin() || (allowedUser() &&
+        (request.auth.uid in resource.data.memberIds ||
+         get(/databases/$(database)/documents/forumCodes/$(resource.data.secretCode)).data.forumId == forumId));
+      allow create: if activeUser() &&
+        request.resource.data.ownerId == request.auth.uid &&
+        request.resource.data.maxMembers is int &&
+        request.resource.data.maxMembers >= 2 &&
+        request.resource.data.maxMembers <= 400 &&
+        (request.resource.data.maxMembers <= 20 || premiumActive());
+
+      // Owner dapat mengubah mode owner-only dan daftar member, tetapi tidak identitas forum.
       allow update: if admin() ||
-        (activeUser() && resource.data.ownerId == request.auth.uid) ||
-        (activeUser() && (request.auth.uid in resource.data.memberIds ||
-          (request.auth.uid in request.resource.data.memberIds &&
-           get(/databases/$(database)/documents/forumCodes/$(resource.data.secretCode)).data.forumId == forumId)) &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds']) &&
-          request.resource.data.name == resource.data.name &&
-          request.resource.data.maxMembers == resource.data.maxMembers &&
-          request.resource.data.secretCode == resource.data.secretCode &&
-          request.resource.data.ownerId == resource.data.ownerId &&
-          request.resource.data.createdAt == resource.data.createdAt &&
-          request.resource.data.memberIds.size() == resource.data.memberIds.size() + 1 &&
-          request.auth.uid in request.resource.data.memberIds);
-      allow delete: if admin() || (activeUser() && resource.data.ownerId == request.auth.uid);
+        (forumOwner(forumId) &&
+         request.resource.data.name == resource.data.name &&
+         request.resource.data.maxMembers == resource.data.maxMembers &&
+         request.resource.data.secretCode == resource.data.secretCode &&
+         request.resource.data.ownerId == resource.data.ownerId &&
+         request.resource.data.createdAt == resource.data.createdAt &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds','ownerOnly']) &&
+         request.resource.data.memberIds.hasAll([resource.data.ownerId]) &&
+         request.resource.data.memberIds.size() <= resource.data.memberIds.size());
+
+      // Join hanya boleh menambah satu anggota.
+      allow update: if activeUser() &&
+        request.auth.uid in resource.data.memberIds &&
+        request.auth.uid in request.resource.data.memberIds &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds']) &&
+        request.resource.data.name == resource.data.name &&
+        request.resource.data.maxMembers == resource.data.maxMembers &&
+        request.resource.data.secretCode == resource.data.secretCode &&
+        request.resource.data.ownerId == resource.data.ownerId &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.memberIds.size() == resource.data.memberIds.size() + 1 &&
+        request.resource.data.memberIds.size() <= resource.data.maxMembers;
+
+      allow delete: if admin() || forumOwner(forumId);
 
       match /members/{uid} {
-        allow read: if allowedUser() && (request.auth.uid == uid || admin());
+        allow read: if allowedUser() && (request.auth.uid == uid || forumOwner(forumId) || admin());
         allow create: if activeUser() && request.auth.uid == uid &&
           request.resource.data.username is string && request.resource.data.displayName is string;
-        allow update, delete: if admin() || (activeUser() && self(uid));
+        allow update: if admin() || (activeUser() && self(uid));
+        allow delete: if admin() || (forumOwner(forumId) && uid != request.auth.uid) || self(uid);
       }
 
       match /messages/{messageId} {
-        allow read: if allowedUser() && (request.auth.uid in get(/databases/$(database)/documents/forums/$(forumId)).data.memberIds || admin());
-        allow create: if activeUser() &&
+        allow read: if allowedUser() &&
+          (request.auth.uid in get(/databases/$(database)/documents/forums/$(forumId)).data.memberIds || admin());
+        allow create: if allowedUser() &&
           request.resource.data.uid == request.auth.uid &&
           request.resource.data.text is string &&
           request.resource.data.text.size() > 0 &&
           request.resource.data.text.size() <= 1000 &&
           request.resource.data.isAdmin == admin() &&
-          ((!("premiumPurchases" in get(/databases/$(database)/documents/users/$(request.auth.uid)).data) && request.resource.data.premiumPurchases == 0) ||
-           request.resource.data.premiumPurchases == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.premiumPurchases) &&
-          (admin() || request.auth.uid in get(/databases/$(database)/documents/forums/$(forumId)).data.memberIds);
+          request.resource.data.premiumPurchases == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.premiumPurchases &&
+          (admin() ||
+           (request.auth.uid in get(/databases/$(database)/documents/forums/$(forumId)).data.memberIds &&
+            (get(/databases/$(database)/documents/forums/$(forumId)).data.ownerOnly != true ||
+             get(/databases/$(database)/documents/forums/$(forumId)).data.ownerId == request.auth.uid)));
         allow update, delete: if admin() || (activeUser() && resource.data.uid == request.auth.uid);
       }
     }

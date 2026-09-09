@@ -61,3 +61,17 @@ File ini adalah aplikasi siap-deploy setelah Firebase config + rules dipasang. S
 - Rules akses forum/admin diperjelas agar admin dapat membaca daftar forum.
 
 **Penting:** deploy `firestore.rules` terbaru bersama file website.
+
+
+## Pembaruan fitur
+- Admin message permissions fixed in Firestore Rules.
+- Admin panel access rules fixed.
+- Forum owner can view members, kick members, and toggle owner-only messaging.
+- Premium page with 1 week, 1 month, and 1 year purchase requests.
+- Payment page includes QRIS placeholder and bank account placeholder; replace the displayed payment details in `index.html` before production.
+- "Saya Sudah Bayar" creates a premium purchase request for admin verification and returns to Home after loading.
+
+### Batas anggota forum
+- Akun biasa dapat membuat forum dengan batas 2–20 anggota.
+- Akun Premium dapat memilih batas 2–400 anggota.
+- Batas juga divalidasi di Firestore Rules agar tidak bisa dilewati dengan memanipulasi aplikasi.

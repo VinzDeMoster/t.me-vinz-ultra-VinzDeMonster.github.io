@@ -64,7 +64,7 @@
           <div><span class="eyebrow">PRIVATE • TEXT ONLY</span><h2>Forum rahasia, sederhana, dan nyaman.</h2><p class="muted">Buat forum, bagikan secret code, lalu ngobrol hanya dengan nama tampilan.</p></div>
           <div class="hero-actions"><button class="primary" data-page-go="create">Buat Forum</button><button class="secondary" data-page-go="join">Gabung Forum</button></div>
         </div>
-        <div class="section-head"><h3>Forum saya</h3><span class="muted tiny">Maks. 20 anggota per forum</span></div>
+        <div class="section-head"><h3>Forum saya</h3><span class="muted tiny">Biasa maks. 20 • Premium maks. 400 anggota</span></div>
         <div id="forumList" class="grid"></div>
       </section>
 
@@ -80,7 +80,8 @@
           <span class="eyebrow">CREATE</span><h2>Buat forum baru</h2>
           <form id="createForm">
             <label>Nama forum<input id="forumName" required maxlength="60" placeholder="Contoh: Teman Kelas"></label>
-            <label>Jumlah anggota<input id="memberLimit" type="number" min="2" max="20" value="10" required></label>
+            <label>Jumlah anggota<input id="memberLimit" type="number" min="2" max="20" value="10" required><small id="memberLimitNote" class="tiny muted">Akun biasa: batas maksimal 20 anggota.</small></label>
+            <label class="check-row"><input id="ownerOnly" type="checkbox"> Hanya owner yang dapat mengirim pesan</label>
             <label>Secret code <span id="premiumHint" class="badge">AUTO</span><input id="secretCode" maxlength="24" placeholder="Kosongkan untuk kode acak"></label>
             <div id="customCodeNote" class="notice">Kode custom hanya aktif untuk akun Premium. Akun biasa akan mendapatkan kode acak.</div>
             <button class="primary wide">Buat Forum</button>
@@ -110,13 +111,24 @@
 
       <section id="page-contact" class="page hidden">
         <div class="form-card glass narrow">
-          <span class="eyebrow">PREMIUM</span><h2>Hubungi Admin</h2>
-          <p class="muted">Ingin membeli member Premium? Kirim permintaan ke admin. Admin akan melihat permintaan ini di panel dan memproses Premium untuk akunmu.</p>
-          <form id="supportForm">
-            <label>Pesan untuk admin<textarea id="supportMessage" maxlength="500" rows="5" placeholder="Contoh: Saya ingin membeli Premium 30 hari."></textarea></label>
-            <button class="primary wide">Kirim ke Admin</button>
-          </form>
-          <div class="notice">Tips: tulis durasi Premium yang kamu inginkan agar admin lebih cepat memprosesnya dan bergabung ke forum dengan secret kode BUYER-PREMIUM untuk melakukan transaksi.</div>
+          <span class="eyebrow">PREMIUM</span><h2>Upgrade Premium</h2>
+          <p class="muted">Pilih paket Premium yang kamu inginkan.</p>
+          <div class="premium-plans">
+            <div class="premium-plan"><h3>1 Minggu</h3><strong>Premium Weekly</strong><p class="muted">Akses fitur Premium selama 7 hari.</p><button class="primary wide" data-buy-plan="1 minggu">Beli Sekarang</button></div>
+            <div class="premium-plan"><h3>1 Bulan</h3><strong>Premium Monthly</strong><p class="muted">Akses fitur Premium selama 30 hari.</p><button class="primary wide" data-buy-plan="1 bulan">Beli Sekarang</button></div>
+            <div class="premium-plan"><h3>1 Tahun</h3><strong>Premium Yearly</strong><p class="muted">Akses fitur Premium selama 365 hari.</p><button class="primary wide" data-buy-plan="1 tahun">Beli Sekarang</button></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="page-payment" class="page hidden">
+        <div class="form-card glass narrow">
+          <span class="eyebrow">PAYMENT</span><h2>Pembayaran Premium</h2>
+          <p id="paymentPlanText" class="muted">Paket dipilih.</p>
+          <div class="payment-box"><div class="qr-placeholder">QRIS<br><small>SCAN QR UNTUK BAYAR</small></div><div class="notice"><b>Nomor rekening</b><br><span id="paymentAccount">0000 0000 0000</span><br><span id="paymentBank" class="muted">Bank / QRIS</span></div></div>
+          <button id="paidBtn" class="primary wide">Saya Sudah Bayar</button>
+          <button class="secondary wide" data-page-go="contact">Kembali</button>
+          <div id="paymentLoading" class="notice hidden">Memproses pembayaran…</div>
         </div>
       </section>
 
@@ -133,8 +145,9 @@
 
       <section id="page-forum" class="page hidden">
         <div class="forum-head glass">
-          <button class="icon" data-page-go="home">←</button><div><h2 id="activeForumName">Forum</h2><p id="activeForumMeta" class="muted"></p></div><button id="copyCodeBtn" class="secondary">Salin kode</button>
+          <button class="icon" data-page-go="home">←</button><div><h2 id="activeForumName">Forum</h2><p id="activeForumMeta" class="muted"></p></div><div class="forum-actions"><button id="ownerModeBtn" class="secondary hidden">Mode Owner</button><button id="copyCodeBtn" class="secondary">Salin kode</button></div>
         </div>
+        <div id="ownerControls" class="form-card glass hidden"><h3>Anggota forum</h3><div id="memberResults" class="member-list"></div></div>
         <div id="messages" class="messages glass"></div>
         <form id="messageForm" class="composer glass"><textarea id="messageInput" maxlength="1000" rows="1" placeholder="Tulis pesan teks..." autocomplete="off"></textarea><button class="primary">Kirim</button></form>
       </section>
