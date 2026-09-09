@@ -4,9 +4,12 @@ service cloud.firestore {
     function signedIn() { return request.auth != null; }
     function self(uid) { return signedIn() && request.auth.uid == uid; }
     function admin() {
-      return signedIn() &&
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.get("enabled", false) == true;
+      return signedIn() && (
+        // Dukungan untuk akun admin lama/yang sudah ditandai admin di profil user.
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get("isAdmin", false) == true ||
+        (exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.get("enabled", false) == true)
+      );
     }
     function activeUser() {
       return signedIn() &&
