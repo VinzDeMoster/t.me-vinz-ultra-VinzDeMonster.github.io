@@ -6,23 +6,58 @@ service cloud.firestore {
     function admin() {
       return signedIn() &&
         exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.enabled == true;
+        get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.get("enabled", false) == true;
+    }
+    function activeUser() {
+      return signedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.banned != true &&
+        (!("suspendedUntil" in get(/databases/$(database)/documents/users/$(request.auth.uid)).data) ||
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.suspendedUntil == null ||
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.suspendedUntil <= request.time);
+    }
+    function allowedUser() { return admin() || activeUser(); }
+    function premiumActive() {
+      let u = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      return ("premiumUntil" in u) && (
+        (u.premiumUntil is timestamp && u.premiumUntil > request.time) ||
+        (u.premiumUntil is number && u.premiumUntil > request.time.toMillis())
+      );
+    }
+    function forumOwner(forumId) {
+      return activeUser() && get(/databases/$(database)/documents/forums/$(forumId)).data.ownerId == request.auth.uid;
     }
 
     match /users/{uid} {
       allow read: if self(uid) || admin();
       allow create: if self(uid);
-      // User sendiri hanya boleh mengubah displayName. Status Premium/Admin/Ban
-      // sepenuhnya dikendalikan admin.
       allow update: if admin() || (
-        self(uid) &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName']) &&
+        activeUser() && self(uid) &&
         request.resource.data.username == resource.data.username &&
+        request.resource.data.usernameLower == resource.data.usernameLower &&
         request.resource.data.isAdmin == resource.data.isAdmin &&
         request.resource.data.banned == resource.data.banned &&
         request.resource.data.premiumUntil == resource.data.premiumUntil &&
-        request.resource.data.suspendedUntil == resource.data.suspendedUntil
+        request.resource.data.suspendedUntil == resource.data.suspendedUntil &&
+        request.resource.data.get('premiumPurchases',0) == resource.data.get('premiumPurchases',0) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName'])
       );
+
+      // Redeem kode Premium: hanya kode milik user, sekali pakai, dan durasi harus sama dengan activation doc.
+      allow update: if activeUser() && self(uid) &&
+        request.resource.data.username == resource.data.username &&
+        request.resource.data.usernameLower == resource.data.usernameLower &&
+        request.resource.data.isAdmin == resource.data.isAdmin &&
+        request.resource.data.banned == resource.data.banned &&
+        request.resource.data.suspendedUntil == resource.data.suspendedUntil &&
+        request.resource.data.lastActivationCode is string &&
+        request.resource.data.lastActivationCode != resource.data.get('lastActivationCode','') &&
+        request.resource.data.premiumPurchases == resource.data.get('premiumPurchases',0) + 1 &&
+        request.resource.data.premiumUntil == get(/databases/$(database)/documents/premiumActivations/$(request.resource.data.lastActivationCode)).data.premiumUntil &&
+        get(/databases/$(database)/documents/premiumActivations/$(request.resource.data.lastActivationCode)).data.uid == request.auth.uid &&
+        get(/databases/$(database)/documents/premiumActivations/$(request.resource.data.lastActivationCode)).data.used == false &&
+        getAfter(/databases/$(database)/documents/premiumActivations/$(request.resource.data.lastActivationCode)).data.used == true &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['premiumUntil','premiumPurchases','lastActivationCode']);
       allow delete: if admin();
     }
 
@@ -31,58 +66,94 @@ service cloud.firestore {
       allow create, update, delete: if admin();
     }
 
+    match /supportRequests/{requestId} {
+      allow create: if activeUser() && request.resource.data.uid == request.auth.uid &&
+        request.resource.data.username is string && request.resource.data.type is string;
+      allow read: if admin() || (activeUser() && resource.data.uid == request.auth.uid);
+      allow update, delete: if admin();
+    }
+
+    match /premiumActivations/{code} {
+      allow read: if admin() || (activeUser() && resource.data.uid == request.auth.uid);
+      allow create: if admin() &&
+        request.resource.data.uid is string &&
+        request.resource.data.plan is string &&
+        request.resource.data.days is int && request.resource.data.days > 0 &&
+        request.resource.data.used == false;
+      allow update: if activeUser() && resource.data.uid == request.auth.uid &&
+        resource.data.used == false && request.resource.data.used == true &&
+        request.resource.data.uid == resource.data.uid;
+      allow delete: if admin();
+    }
+
+    match /forumCodes/{code} {
+      allow read: if allowedUser();
+      allow create: if activeUser() && request.resource.data.forumId is string;
+      allow update, delete: if admin();
+    }
+
     match /forums/{forumId} {
-      allow read: if signedIn() && (request.auth.uid == resource.data.ownerId || request.auth.uid in resource.data.memberIds || admin());
-      allow create: if signedIn() &&
+      allow read: if admin() || (allowedUser() &&
+        (request.auth.uid in resource.data.memberIds ||
+         get(/databases/$(database)/documents/forumCodes/$(resource.data.secretCode)).data.forumId == forumId));
+      allow create: if activeUser() &&
         request.resource.data.ownerId == request.auth.uid &&
-        request.resource.data.memberIds.size() == 1 &&
-        request.auth.uid in request.resource.data.memberIds &&
+        request.resource.data.maxMembers is int &&
         request.resource.data.maxMembers >= 2 &&
-        request.resource.data.maxMembers <= 20 &&
-        request.resource.data.name is string &&
-        request.resource.data.name.size() > 0 &&
-        request.resource.data.name.size() <= 100 &&
-        request.resource.data.secretCode is string &&
-        request.resource.data.secretCode.size() > 0;
-      // Hanya admin yang boleh melakukan perubahan umum pada forum.
-      // User biasa hanya boleh menambah dirinya sendiri saat join.
-      allow update: if admin() || (
-        signedIn() &&
+        request.resource.data.maxMembers <= 400 &&
+        (request.resource.data.maxMembers <= 20 || premiumActive());
+
+      // Owner dapat mengubah mode owner-only dan daftar member, tetapi tidak identitas forum.
+      allow update: if admin() ||
+        (forumOwner(forumId) &&
+         request.resource.data.name == resource.data.name &&
+         request.resource.data.maxMembers == resource.data.maxMembers &&
+         request.resource.data.secretCode == resource.data.secretCode &&
+         request.resource.data.ownerId == resource.data.ownerId &&
+         request.resource.data.createdAt == resource.data.createdAt &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds','ownerOnly']) &&
+         request.resource.data.memberIds.hasAll([resource.data.ownerId]) &&
+         request.resource.data.memberIds.size() <= resource.data.memberIds.size());
+
+      // Join hanya boleh menambah satu anggota.
+      allow update: if activeUser() &&
         request.auth.uid in resource.data.memberIds &&
+        request.auth.uid in request.resource.data.memberIds &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds']) &&
-        request.resource.data.memberIds.hasAll(resource.data.memberIds) &&
+        request.resource.data.name == resource.data.name &&
+        request.resource.data.maxMembers == resource.data.maxMembers &&
+        request.resource.data.secretCode == resource.data.secretCode &&
+        request.resource.data.ownerId == resource.data.ownerId &&
+        request.resource.data.createdAt == resource.data.createdAt &&
         request.resource.data.memberIds.size() == resource.data.memberIds.size() + 1 &&
-        request.auth.uid in request.resource.data.memberIds
-      );
-      allow delete: if admin() || (signedIn() && resource.data.ownerId == request.auth.uid);
+        request.resource.data.memberIds.size() <= resource.data.maxMembers;
+
+      allow delete: if admin() || forumOwner(forumId);
 
       match /members/{uid} {
-        allow read: if signedIn() && (request.auth.uid == uid || admin());
-        allow create: if signedIn() && request.auth.uid == uid &&
-          request.resource.data.displayName is string &&
-          request.resource.data.username is string &&
-          request.resource.data.role in ['owner','member'];
-        allow update, delete: if admin() || self(uid);
+        allow read: if allowedUser() && (request.auth.uid == uid || forumOwner(forumId) || admin());
+        allow create: if activeUser() && request.auth.uid == uid &&
+          request.resource.data.username is string && request.resource.data.displayName is string;
+        allow update: if admin() || (activeUser() && self(uid));
+        allow delete: if admin() || (forumOwner(forumId) && uid != request.auth.uid) || self(uid);
       }
 
       match /messages/{messageId} {
-        allow read: if signedIn() && (request.auth.uid in get(/databases/$(database)/documents/forums/$(forumId)).data.memberIds || admin());
-        allow create: if signedIn() &&
+        allow read: if allowedUser() &&
+          (request.auth.uid in get(/databases/$(database)/documents/forums/$(forumId)).data.memberIds || admin());
+        allow create: if allowedUser() &&
           request.resource.data.uid == request.auth.uid &&
           request.resource.data.text is string &&
           request.resource.data.text.size() > 0 &&
           request.resource.data.text.size() <= 1000 &&
-          request.auth.uid in get(/databases/$(database)/documents/forums/$(forumId)).data.memberIds;
-        allow update, delete: if admin() || (signedIn() && resource.data.uid == request.auth.uid);
+          request.resource.data.isAdmin == admin() &&
+          request.resource.data.premiumPurchases == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get("premiumPurchases",0) &&
+          (admin() ||
+           (request.auth.uid in get(/databases/$(database)/documents/forums/$(forumId)).data.memberIds &&
+            (get(/databases/$(database)/documents/forums/$(forumId)).data.ownerOnly != true ||
+             get(/databases/$(database)/documents/forums/$(forumId)).data.ownerId == request.auth.uid)));
+        allow update, delete: if admin() || (activeUser() && resource.data.uid == request.auth.uid);
       }
-    }
-
-    // Permintaan Premium: user boleh membuat dan melihat permintaannya sendiri;
-    // admin boleh melihat dan mengelola semua permintaan.
-    match /premiumRequests/{requestId} {
-      allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
-      allow read: if signedIn() && (resource.data.uid == request.auth.uid || admin());
-      allow update, delete: if admin();
     }
   }
 }

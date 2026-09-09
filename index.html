@@ -44,6 +44,7 @@
         <button class="nav" data-page="join">↪ <span>Bergabung Forum</span></button>
         <button class="nav" data-page="create">＋ <span>Buat Forum</span></button>
         <button class="nav" data-page="settings">⚙ <span>Pengaturan</span></button>
+        <button class="nav" data-page="contact">✦ <span>Premium</span></button>
         <button class="nav hidden" id="adminNav" data-page="admin">♛ <span>Admin</span></button>
       </nav>
       <button id="logoutBtn" class="nav logout">↪ Keluar</button>
@@ -63,7 +64,7 @@
           <div><span class="eyebrow">PRIVATE • TEXT ONLY</span><h2>Forum rahasia, sederhana, dan nyaman.</h2><p class="muted">Buat forum, bagikan secret code, lalu ngobrol hanya dengan nama tampilan.</p></div>
           <div class="hero-actions"><button class="primary" data-page-go="create">Buat Forum</button><button class="secondary" data-page-go="join">Gabung Forum</button></div>
         </div>
-        <div class="section-head"><h3>Forum saya</h3><span class="muted tiny">Maks. 20 anggota per forum</span></div>
+        <div class="section-head"><h3>Forum saya</h3><span class="muted tiny">Biasa maks. 20 • Premium maks. 400 anggota</span></div>
         <div id="forumList" class="grid"></div>
       </section>
 
@@ -79,7 +80,7 @@
           <span class="eyebrow">CREATE</span><h2>Buat forum baru</h2>
           <form id="createForm">
             <label>Nama forum<input id="forumName" required maxlength="60" placeholder="Contoh: Teman Kelas"></label>
-            <label>Jumlah anggota<input id="memberLimit" type="number" min="2" max="20" value="10" required></label>
+            <label>Jumlah anggota<input id="memberLimit" type="number" min="2" max="20" value="10" required><small id="memberLimitNote" class="tiny muted">Akun biasa: batas maksimal 20 anggota.</small></label>
             <label>Secret code <span id="premiumHint" class="badge">AUTO</span><input id="secretCode" maxlength="24" placeholder="Kosongkan untuk kode acak"></label>
             <div id="customCodeNote" class="notice">Kode custom hanya aktif untuk akun Premium. Akun biasa akan mendapatkan kode acak.</div>
             <button class="primary wide">Buat Forum</button>
@@ -92,8 +93,17 @@
           <span class="eyebrow">ACCOUNT</span><h2>Pengaturan akun</h2>
           <form id="profileForm">
             <div class="two"><label>Username (tidak bisa diubah)<input id="settingsUsername" disabled></label><label>Nama tampilan<input id="settingsDisplayName" maxlength="30" required></label></div>
+            <div class="account-status"><span class="muted">Status akun</span><strong id="accountStatus">BIASA</strong><small id="accountStatusDetail" class="muted">Akun biasa</small></div>
             <button class="primary">Simpan nama</button>
           </form>
+          <hr>
+          <hr>
+          <div class="activation-card">
+            <h3>Aktivasi Premium</h3>
+            <p class="muted">Masukkan kode aktivasi yang diberikan setelah pembayaran kamu diverifikasi.</p>
+            <form id="activationForm"><div class="activation-row"><input id="activationCode" maxlength="32" placeholder="Contoh: PREM-ABCD-1234" autocomplete="off"><button class="primary">Aktifkan</button></div></form>
+            <div id="activationStatus" class="notice hidden"></div>
+          </div>
           <hr>
           <form id="passwordForm">
             <h3>Ganti password</h3>
@@ -106,8 +116,33 @@
         </div>
       </section>
 
+      <section id="page-contact" class="page hidden">
+        <div class="form-card glass narrow">
+          <span class="eyebrow">PREMIUM</span><h2>Upgrade Premium</h2>
+          <p class="muted">Pilih paket Premium yang kamu inginkan.</p>
+          <div class="premium-plans">
+            <div class="premium-plan"><h3>1 Minggu</h3><strong>Premium Weekly</strong><p class="muted">Akses fitur Premium selama 7 hari.</p><button class="primary wide" data-buy-plan="1 minggu">Beli Sekarang</button></div>
+            <div class="premium-plan"><h3>1 Bulan</h3><strong>Premium Monthly</strong><p class="muted">Akses fitur Premium selama 30 hari.</p><button class="primary wide" data-buy-plan="1 bulan">Beli Sekarang</button></div>
+            <div class="premium-plan"><h3>1 Tahun</h3><strong>Premium Yearly</strong><p class="muted">Akses fitur Premium selama 365 hari.</p><button class="primary wide" data-buy-plan="1 tahun">Beli Sekarang</button></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="page-payment" class="page hidden">
+        <div class="form-card glass narrow">
+          <span class="eyebrow">PAYMENT</span><h2>Pembayaran Premium</h2>
+          <p id="paymentPlanText" class="muted">Paket dipilih.</p>
+          <div class="payment-box"><div class="qr-placeholder">QRIS<br><small>SCAN QR UNTUK BAYAR</small></div><div class="notice"><b>Nomor rekening</b><br><span id="paymentAccount">0000 0000 0000</span><br><span id="paymentBank" class="muted">Bank / QRIS</span></div></div>
+          <button id="paidBtn" class="primary wide">Saya Sudah Bayar</button>
+          <button class="secondary wide" data-page-go="contact">Kembali</button>
+          <div id="paymentLoading" class="notice hidden">Memproses pembayaran…</div>
+        </div>
+      </section>
+
       <section id="page-admin" class="page hidden">
         <div class="section-head"><div><span class="eyebrow">CONTROL CENTER</span><h2>Admin Panel</h2></div></div>
+        <div class="form-card glass" style="margin-bottom:15px"><div class="section-head"><div><h3>Aktivitas Forum</h3><p class="muted">Daftar seluruh forum yang ada. Untuk privasi, admin hanya melihat secret code forum.</p></div><button class="secondary" id="refreshForumsBtn" type="button">Refresh</button></div><div id="adminForumResults" class="notice">Belum dimuat.</div></div>
+        <div class="form-card glass" style="margin-bottom:15px"><div class="section-head"><div><h3>Permintaan Premium</h3><p class="muted">Verifikasi pembayaran dan buat kode aktivasi untuk pembeli.</p></div><button class="secondary" id="refreshSupportBtn" type="button">Refresh</button></div><div id="supportResults" class="notice">Belum dimuat.</div></div>
         <div class="admin-grid">
           <div class="form-card glass"><h3>Kelola user</h3><form id="userSearchForm"><input id="userSearch" placeholder="Cari username"><button class="secondary wide">Cari</button></form><div id="userResults"></div></div>
           <div class="form-card glass"><h3>Berikan / cabut Premium</h3><form id="premiumForm"><input id="premiumUsername" placeholder="Username"><div class="two"><select id="premiumMode"><option value="grant">Berikan Premium</option><option value="revoke">Jadikan Biasa</option></select><input id="premiumDays" type="number" min="1" value="7" placeholder="Hari"></div><button class="primary wide">Terapkan</button></form></div>
@@ -117,10 +152,11 @@
 
       <section id="page-forum" class="page hidden">
         <div class="forum-head glass">
-          <button class="icon" data-page-go="home">←</button><div><h2 id="activeForumName">Forum</h2><p id="activeForumMeta" class="muted"></p></div><button id="copyCodeBtn" class="secondary">Salin kode</button>
+          <button class="icon" data-page-go="home">←</button><div><h2 id="activeForumName">Forum</h2><p id="activeForumMeta" class="muted"></p></div><div class="forum-actions"><button id="copyCodeBtn" class="secondary">Salin kode</button></div>
         </div>
+        <div id="ownerControls" class="forum-detail glass hidden"><div class="detail-title"><div><span class="eyebrow">DETAIL FORUM</span><h3>Pengaturan & anggota</h3></div><button id="ownerModeBtn" class="secondary">Hanya owner</button></div><p id="ownerModeHint" class="tiny muted"></p><div id="memberResults" class="member-list"></div></div>
         <div id="messages" class="messages glass"></div>
-        <form id="messageForm" class="composer glass"><input id="messageInput" maxlength="1000" placeholder="Tulis pesan teks..." autocomplete="off"><button class="primary">Kirim</button></form>
+        <form id="messageForm" class="composer glass"><textarea id="messageInput" maxlength="1000" rows="1" placeholder="Tulis pesan teks..." autocomplete="off"></textarea><button class="primary">Kirim</button></form>
       </section>
     </main>
   </div>
