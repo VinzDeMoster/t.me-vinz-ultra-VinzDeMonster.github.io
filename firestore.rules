@@ -59,7 +59,19 @@ service cloud.firestore {
       allow read: if admin() || (allowedUser() && (request.auth.uid in resource.data.memberIds || get(/databases/$(database)/documents/forumCodes/$(resource.data.secretCode)).data.forumId == forumId));
       allow create: if activeUser() && request.resource.data.ownerId == request.auth.uid;
       allow update: if admin() ||
-        (activeUser() && resource.data.ownerId == request.auth.uid) ||
+        (activeUser() && resource.data.ownerId == request.auth.uid &&
+          request.resource.data.name == resource.data.name &&
+          request.resource.data.maxMembers == resource.data.maxMembers &&
+          request.resource.data.secretCode == resource.data.secretCode &&
+          request.resource.data.ownerId == resource.data.ownerId &&
+          request.resource.data.createdAt == resource.data.createdAt &&
+          request.resource.data.memberIds is list &&
+          request.auth.uid in request.resource.data.memberIds &&
+          request.resource.data.memberIds.size() >= 1 &&
+          request.resource.data.memberIds.size() <= resource.data.maxMembers &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds','ownerOnly']) &&
+          ((request.resource.data.memberIds == resource.data.memberIds) ||
+           request.resource.data.memberIds.size() == resource.data.memberIds.size() - 1)) ||
         (activeUser() && (request.auth.uid in resource.data.memberIds ||
           (request.auth.uid in request.resource.data.memberIds &&
            get(/databases/$(database)/documents/forumCodes/$(resource.data.secretCode)).data.forumId == forumId)) &&
@@ -77,20 +89,26 @@ service cloud.firestore {
         allow read: if allowedUser() && (request.auth.uid == uid || admin());
         allow create: if activeUser() && request.auth.uid == uid &&
           request.resource.data.username is string && request.resource.data.displayName is string;
-        allow update, delete: if admin() || (activeUser() && self(uid));
+        allow update, delete: if admin() || (activeUser() && (self(uid) || get(/databases/$(database)/documents/forums/$(forumId)).data.ownerId == request.auth.uid));
       }
 
       match /messages/{messageId} {
         allow read: if allowedUser() && (request.auth.uid in get(/databases/$(database)/documents/forums/$(forumId)).data.memberIds || admin());
-        allow create: if activeUser() &&
+        allow create: if (admin() || activeUser()) &&
           request.resource.data.uid == request.auth.uid &&
           request.resource.data.text is string &&
           request.resource.data.text.size() > 0 &&
           request.resource.data.text.size() <= 1000 &&
           request.resource.data.isAdmin == admin() &&
-          ((!("premiumPurchases" in get(/databases/$(database)/documents/users/$(request.auth.uid)).data) && request.resource.data.premiumPurchases == 0) ||
-           request.resource.data.premiumPurchases == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.premiumPurchases) &&
-          (admin() || request.auth.uid in get(/databases/$(database)/documents/forums/$(forumId)).data.memberIds);
+          request.resource.data.premiumPurchases ==
+            (("premiumPurchases" in get(/databases/$(database)/documents/users/$(request.auth.uid)).data)
+              ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.premiumPurchases
+              : 0) &&
+          (admin() ||
+           (request.auth.uid in get(/databases/$(database)/documents/forums/$(forumId)).data.memberIds &&
+            (!("ownerOnly" in get(/databases/$(database)/documents/forums/$(forumId)).data) ||
+             get(/databases/$(database)/documents/forums/$(forumId)).data.ownerOnly != true ||
+             request.auth.uid == get(/databases/$(database)/documents/forums/$(forumId)).data.ownerId)));
         allow update, delete: if admin() || (activeUser() && resource.data.uid == request.auth.uid);
       }
     }
