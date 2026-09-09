@@ -42,6 +42,22 @@ service cloud.firestore {
         request.resource.data.premiumPurchases == resource.data.premiumPurchases &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName'])
       );
+
+      // Redeem kode Premium: hanya kode milik user, sekali pakai, dan durasi harus sama dengan activation doc.
+      allow update: if activeUser() && self(uid) &&
+        request.resource.data.username == resource.data.username &&
+        request.resource.data.usernameLower == resource.data.usernameLower &&
+        request.resource.data.isAdmin == resource.data.isAdmin &&
+        request.resource.data.banned == resource.data.banned &&
+        request.resource.data.suspendedUntil == resource.data.suspendedUntil &&
+        request.resource.data.lastActivationCode is string &&
+        request.resource.data.lastActivationCode != resource.data.get('lastActivationCode','') &&
+        request.resource.data.premiumPurchases == resource.data.get('premiumPurchases',0) + 1 &&
+        request.resource.data.premiumUntil == get(/databases/$(database)/documents/premiumActivations/$(request.resource.data.lastActivationCode)).data.premiumUntil &&
+        get(/databases/$(database)/documents/premiumActivations/$(request.resource.data.lastActivationCode)).data.uid == request.auth.uid &&
+        get(/databases/$(database)/documents/premiumActivations/$(request.resource.data.lastActivationCode)).data.used == false &&
+        getAfter(/databases/$(database)/documents/premiumActivations/$(request.resource.data.lastActivationCode)).data.used == true &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['premiumUntil','premiumPurchases','lastActivationCode']);
       allow delete: if admin();
     }
 
@@ -52,9 +68,18 @@ service cloud.firestore {
 
     match /supportRequests/{requestId} {
       allow create: if activeUser() && request.resource.data.uid == request.auth.uid &&
-        request.resource.data.username is string &&
-        request.resource.data.type is string;
-      allow read, update, delete: if admin();
+        request.resource.data.username is string && request.resource.data.type is string;
+      allow read: if admin() || (activeUser() && resource.data.uid == request.auth.uid);
+      allow update, delete: if admin();
+    }
+
+    match /premiumActivations/{code} {
+      allow read: if admin() || (activeUser() && resource.data.uid == request.auth.uid);
+      allow create: if admin();
+      allow update: if activeUser() && resource.data.uid == request.auth.uid &&
+        resource.data.used == false && request.resource.data.used == true &&
+        request.resource.data.uid == resource.data.uid;
+      allow delete: if admin();
     }
 
     match /forumCodes/{code} {
@@ -118,7 +143,7 @@ service cloud.firestore {
           request.resource.data.text.size() > 0 &&
           request.resource.data.text.size() <= 1000 &&
           request.resource.data.isAdmin == admin() &&
-          request.resource.data.premiumPurchases == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.premiumPurchases &&
+          request.resource.data.premiumPurchases == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('premiumPurchases',0) &&
           (admin() ||
            (request.auth.uid in get(/databases/$(database)/documents/forums/$(forumId)).data.memberIds &&
             (get(/databases/$(database)/documents/forums/$(forumId)).data.ownerOnly != true ||

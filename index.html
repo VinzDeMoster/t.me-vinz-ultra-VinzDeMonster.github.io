@@ -44,7 +44,7 @@
         <button class="nav" data-page="join">↪ <span>Bergabung Forum</span></button>
         <button class="nav" data-page="create">＋ <span>Buat Forum</span></button>
         <button class="nav" data-page="settings">⚙ <span>Pengaturan</span></button>
-        <button class="nav" data-page="contact">✉ <span>Hubungi Admin</span></button>
+        <button class="nav" data-page="contact">✦ <span>Premium</span></button>
         <button class="nav hidden" id="adminNav" data-page="admin">♛ <span>Admin</span></button>
       </nav>
       <button id="logoutBtn" class="nav logout">↪ Keluar</button>
@@ -81,7 +81,6 @@
           <form id="createForm">
             <label>Nama forum<input id="forumName" required maxlength="60" placeholder="Contoh: Teman Kelas"></label>
             <label>Jumlah anggota<input id="memberLimit" type="number" min="2" max="20" value="10" required><small id="memberLimitNote" class="tiny muted">Akun biasa: batas maksimal 20 anggota.</small></label>
-            <label class="check-row"><input id="ownerOnly" type="checkbox"> Hanya owner yang dapat mengirim pesan</label>
             <label>Secret code <span id="premiumHint" class="badge">AUTO</span><input id="secretCode" maxlength="24" placeholder="Kosongkan untuk kode acak"></label>
             <div id="customCodeNote" class="notice">Kode custom hanya aktif untuk akun Premium. Akun biasa akan mendapatkan kode acak.</div>
             <button class="primary wide">Buat Forum</button>
@@ -97,6 +96,14 @@
             <div class="account-status"><span class="muted">Status akun</span><strong id="accountStatus">BIASA</strong><small id="accountStatusDetail" class="muted">Akun biasa</small></div>
             <button class="primary">Simpan nama</button>
           </form>
+          <hr>
+          <hr>
+          <div class="activation-card">
+            <h3>Aktivasi Premium</h3>
+            <p class="muted">Masukkan kode aktivasi yang diberikan setelah pembayaran kamu diverifikasi.</p>
+            <form id="activationForm"><div class="activation-row"><input id="activationCode" maxlength="32" placeholder="Contoh: PREM-ABCD-1234" autocomplete="off"><button class="primary">Aktifkan</button></div></form>
+            <div id="activationStatus" class="notice hidden"></div>
+          </div>
           <hr>
           <form id="passwordForm">
             <h3>Ganti password</h3>
@@ -145,9 +152,9 @@
 
       <section id="page-forum" class="page hidden">
         <div class="forum-head glass">
-          <button class="icon" data-page-go="home">←</button><div><h2 id="activeForumName">Forum</h2><p id="activeForumMeta" class="muted"></p></div><div class="forum-actions"><button id="ownerModeBtn" class="secondary hidden">Mode Owner</button><button id="copyCodeBtn" class="secondary">Salin kode</button></div>
+          <button class="icon" data-page-go="home">←</button><div><h2 id="activeForumName">Forum</h2><p id="activeForumMeta" class="muted"></p></div><div class="forum-actions"><button id="copyCodeBtn" class="secondary">Salin kode</button></div>
         </div>
-        <div id="ownerControls" class="form-card glass hidden"><h3>Anggota forum</h3><div id="memberResults" class="member-list"></div></div>
+        <div id="ownerControls" class="forum-detail glass hidden"><div class="detail-title"><div><span class="eyebrow">DETAIL FORUM</span><h3>Pengaturan & anggota</h3></div><button id="ownerModeBtn" class="secondary">Hanya owner</button></div><p id="ownerModeHint" class="tiny muted"></p><div id="memberResults" class="member-list"></div></div>
         <div id="messages" class="messages glass"></div>
         <form id="messageForm" class="composer glass"><textarea id="messageInput" maxlength="1000" rows="1" placeholder="Tulis pesan teks..." autocomplete="off"></textarea><button class="primary">Kirim</button></form>
       </section>
