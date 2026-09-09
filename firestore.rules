@@ -6,7 +6,7 @@ service cloud.firestore {
     function admin() {
       return signedIn() &&
         exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.enabled == true;
+        get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.get("enabled", false) == true;
     }
     function activeUser() {
       return signedIn() &&
@@ -75,7 +75,11 @@ service cloud.firestore {
 
     match /premiumActivations/{code} {
       allow read: if admin() || (activeUser() && resource.data.uid == request.auth.uid);
-      allow create: if admin();
+      allow create: if admin() &&
+        request.resource.data.uid is string &&
+        request.resource.data.plan is string &&
+        request.resource.data.days is int && request.resource.data.days > 0 &&
+        request.resource.data.used == false;
       allow update: if activeUser() && resource.data.uid == request.auth.uid &&
         resource.data.used == false && request.resource.data.used == true &&
         request.resource.data.uid == resource.data.uid;
@@ -143,7 +147,7 @@ service cloud.firestore {
           request.resource.data.text.size() > 0 &&
           request.resource.data.text.size() <= 1000 &&
           request.resource.data.isAdmin == admin() &&
-          request.resource.data.premiumPurchases == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('premiumPurchases',0) &&
+          request.resource.data.premiumPurchases == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get("premiumPurchases",0) &&
           (admin() ||
            (request.auth.uid in get(/databases/$(database)/documents/forums/$(forumId)).data.memberIds &&
             (get(/databases/$(database)/documents/forums/$(forumId)).data.ownerOnly != true ||

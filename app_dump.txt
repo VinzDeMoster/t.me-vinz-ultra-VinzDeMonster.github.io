@@ -233,14 +233,9 @@ function openForum(id,data){
   $("ownerControls").classList.toggle("hidden",!isOwner);
   $("ownerModeBtn").textContent=data.ownerOnly?"Aktif • ON":"Nonaktif • OFF";
   $("ownerModeHint").textContent=data.ownerOnly?"Mode aktif: hanya owner yang dapat mengirim chat.":"Mode nonaktif: semua anggota dapat mengirim chat.";
-  const setComposerState=(locked)=>{
-    $("messageInput").disabled=locked;
-    $("messageForm").querySelector("button").disabled=locked;
-    $("messageInput").placeholder=locked?"Chat dikunci oleh owner…":"Tulis pesan teks…";
-    $("messageForm").classList.toggle("locked",locked);
-  };
   const composerLocked=data.ownerOnly===true && !isOwner && !profile.isAdmin;
-  setComposerState(composerLocked);
+  $("messageInput").disabled=composerLocked; $("messageForm").querySelector("button").disabled=composerLocked;
+  $("messageInput").placeholder=composerLocked?"Chat dikunci oleh owner…":"Tulis pesan teks…";
   $("copyCodeBtn").onclick=()=>navigator.clipboard.writeText(data.secretCode).then(()=>toast("Kode disalin."));
   $("ownerModeBtn").onclick=async()=>{
     try{
@@ -249,7 +244,7 @@ function openForum(id,data){
       activeForum.ownerOnly=next; $("ownerModeBtn").textContent=next?"Aktif • ON":"Nonaktif • OFF";
       $("ownerModeHint").textContent=next?"Mode aktif: hanya owner yang dapat mengirim chat.":"Mode nonaktif: semua anggota dapat mengirim chat.";
       const locked=next && currentUser.uid!==activeForum.ownerId && !profile.isAdmin;
-      setComposerState(locked);
+      $("messageInput").disabled=locked; $("messageForm").querySelector("button").disabled=locked; $("messageInput").placeholder=locked?"Chat dikunci oleh owner…":"Tulis pesan teks…";
       toast(next?"Sekarang hanya owner yang dapat mengirim.":"Semua anggota dapat mengirim pesan.");
     }catch(err){toast(err.message.replace("Firebase: ",""));}
   };
@@ -298,9 +293,6 @@ function openForum(id,data){
       catch(err){toast(err.message.replace("Firebase: ",""));}
     });
     box.scrollTop=box.scrollHeight;
-  },err=>{
-    console.error("Messages listener:",err);
-    toast("Gagal memuat chat: "+err.message.replace("Firebase: ",""));
   });
 }
 $("messageForm").onsubmit=async e=>{
