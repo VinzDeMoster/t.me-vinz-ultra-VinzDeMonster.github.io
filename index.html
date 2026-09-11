@@ -44,6 +44,7 @@
         <button class="nav" data-page="join">↪ <span>Bergabung Forum</span></button>
         <button class="nav" data-page="create">＋ <span>Buat Forum</span></button>
         <button class="nav" data-page="settings">⚙ <span>Pengaturan</span></button>
+        <button class="nav" data-page="inbox">✉ <span>Inbox</span><span id="inboxBadge" class="inbox-badge hidden">0</span></button>
         <button class="nav" data-page="contact">✦ <span>Premium</span></button>
         <button class="nav hidden" id="adminNav" data-page="admin">♛ <span>Admin</span></button>
       </nav>
@@ -116,6 +117,14 @@
         </div>
       </section>
 
+      <section id="page-inbox" class="page hidden">
+        <div class="form-card glass">
+          <span class="eyebrow">INBOX</span><h2>Inbox</h2>
+          <p class="muted">Informasi akun, verifikasi Premium, kode aktivasi, dan pemberitahuan dari admin akan muncul di sini.</p>
+          <div id="inboxResults" class="inbox-list"><div class="notice">Belum ada pesan.</div></div>
+        </div>
+      </section>
+
       <section id="page-contact" class="page hidden">
         <div class="form-card glass narrow">
           <span class="eyebrow">PREMIUM</span><h2>Upgrade Premium</h2>
@@ -145,6 +154,7 @@
         <div class="form-card glass" style="margin-bottom:15px"><div class="section-head"><div><h3>Permintaan Premium</h3><p class="muted">Verifikasi pembayaran dan buat kode aktivasi untuk pembeli.</p></div><button class="secondary" id="refreshSupportBtn" type="button">Refresh</button></div><div id="supportResults" class="notice">Belum dimuat.</div></div>
         <div class="admin-grid">
           <div class="form-card glass"><h3>Kelola user</h3><form id="userSearchForm"><input id="userSearch" placeholder="Cari username"><button class="secondary wide">Cari</button></form><div id="userResults"></div></div>
+          <div class="form-card glass"><h3>Moderasi forum</h3><form id="forumModerationForm"><input id="moderationCode" placeholder="Secret code forum"><select id="forumModerationMode"><option value="ban">Ban forum</option><option value="unban">Unban forum</option><option value="suspend">Suspend forum</option><option value="unsuspend">Unsuspend forum</option></select><input id="forumSuspendHours" type="number" min="1" value="24" placeholder="Jam suspend"><button class="secondary wide">Terapkan</button></form><p class="tiny muted">Ban/suspend forum memblokir akses anggota. Admin tetap dapat mengaksesnya.</p></div>
           <div class="form-card glass"><h3>Berikan / cabut Premium</h3><form id="premiumForm"><input id="premiumUsername" placeholder="Username"><div class="two"><select id="premiumMode"><option value="grant">Berikan Premium</option><option value="revoke">Jadikan Biasa</option></select><input id="premiumDays" type="number" min="1" value="7" placeholder="Hari"></div><button class="primary wide">Terapkan</button></form></div>
           <div class="form-card glass"><h3>Admin access</h3><form id="adminForm"><input id="adminUsername" placeholder="Username"><div class="two"><select id="adminMode"><option value="grant">Jadikan Admin</option><option value="revoke">Cabut Admin</option></select><button class="secondary">Terapkan</button></div></form><p class="tiny muted">Perubahan admin tersimpan di Firestore. Jangan ubah rules untuk membuat celah privilege.</p></div>
         </div>
@@ -154,9 +164,23 @@
         <div class="forum-head glass">
           <button class="icon" data-page-go="home">←</button><div><h2 id="activeForumName">Forum</h2><p id="activeForumMeta" class="muted"></p></div><div class="forum-actions"><button id="copyCodeBtn" class="secondary">Salin kode</button></div>
         </div>
-        <div id="ownerControls" class="forum-detail glass hidden"><div class="detail-title"><div><span class="eyebrow">DETAIL FORUM</span><h3>Pengaturan & anggota</h3></div><button id="ownerModeBtn" class="secondary">Hanya owner</button></div><p id="ownerModeHint" class="tiny muted"></p><div id="memberResults" class="member-list"></div></div>
+        <div id="ownerControls" class="forum-detail glass hidden">
+          <div class="detail-title"><div><span class="eyebrow">DETAIL FORUM</span><h3>Detail forum</h3><p class="tiny muted">Pengaturan ini hanya dapat dilihat dan diubah oleh pemilik forum.</p></div><button id="ownerModeBtn" class="secondary">Hanya owner</button></div>
+          <p id="ownerModeHint" class="tiny muted"></p>
+          <div class="detail-section"><strong>Anggota</strong><div id="memberResults" class="member-list"></div></div>
+          <button id="leaveForumBtn" class="secondary wide" type="button">Keluar forum</button>
+        </div>
         <div id="messages" class="messages glass"></div>
         <form id="messageForm" class="composer glass"><textarea id="messageInput" maxlength="1000" rows="1" placeholder="Tulis pesan teks..." autocomplete="off"></textarea><button class="primary">Kirim</button></form>
+        <div id="translatorPanel" class="translator-panel glass">
+          <div><span class="eyebrow">PREMIUM TOOL</span><h3>Terjemahkan sandi rahasia</h3><p class="tiny muted">Morse, angka, rumus, dan sandi modern/digital.</p></div>
+          <div id="translatorLocked" class="notice hidden">Fitur ini khusus Premium. Admin tetap dapat menggunakannya.</div>
+          <div id="translatorBody">
+            <textarea id="translatorInput" rows="3" placeholder="Masukkan sandi yang ingin diterjemahkan..."></textarea>
+            <div class="translator-actions"><select id="translatorType"><option value="auto">Deteksi otomatis</option><option value="morse">Morse</option><option value="number">Angka</option><option value="formula">Rumus</option><option value="digital">Modern / Digital</option></select><button id="translateBtn" class="primary" type="button">Terjemahkan</button></div>
+            <div id="translatorResult" class="translator-result hidden"></div>
+          </div>
+        </div>
       </section>
     </main>
   </div>
