@@ -67,7 +67,7 @@ service cloud.firestore {
          request.resource.data.premiumUntil == resource.data.premiumUntil &&
          request.resource.data.suspendedUntil == resource.data.suspendedUntil &&
          request.resource.data.get('premiumPurchases',0) == resource.data.get('premiumPurchases',0) &&
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName']);
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName']));
       allow delete: if author() || admin();
     }
 
