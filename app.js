@@ -213,7 +213,7 @@ $("createForm").onsubmit=async e=>{
     const premium=isPremiumActive(profile.premiumUntil), unlimited=canAdmin();
     const maxAllowed=unlimited?Number.MAX_SAFE_INTEGER:(premium?400:20);
     if(max<2||(!unlimited && max>maxAllowed))return toast(unlimited?"Jumlah anggota harus minimal 2.":premium?"Jumlah anggota Premium harus 2–400.":"Akun biasa hanya dapat membuat forum sampai 20 anggota.");
-    if(custom&&!premium&&!unlimited)return toast("Custom code hanya untuk Premium/Admin/Author.");
+    if(custom&&!premium&&!unlimited)return toast("Custom code hanya untuk Premium.");
     const secret=custom||randomCode();
     if(!custom && secret.length!==18)throw new Error("Gagal membuat secret code 18 karakter.");
     const forumRef=doc(collection(db,"forums"));
