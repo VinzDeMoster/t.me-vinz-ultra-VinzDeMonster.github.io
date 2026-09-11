@@ -103,8 +103,8 @@ service cloud.firestore {
     }
 
     match /forumCodes/{code} {
-      allow read: if allowedUser();
-      allow create: if activeUser() && request.resource.data.forumId is string;
+      allow read: if signedIn();
+      allow create: if (privileged() || activeUser()) && request.resource.data.forumId is string;
       allow update, delete: if privileged();
     }
 
@@ -112,7 +112,7 @@ service cloud.firestore {
       allow read: if privileged() || (allowedUser() &&
         (request.auth.uid in resource.data.get("memberIds", []) ||
          get(/databases/$(database)/documents/forumCodes/$(resource.data.secretCode)).data.forumId == forumId));
-      allow create: if activeUser() && request.resource.data.ownerId == request.auth.uid &&
+      allow create: if (privileged() || activeUser()) && request.resource.data.ownerId == request.auth.uid &&
         request.resource.data.maxMembers is int && request.resource.data.maxMembers >= 2 &&
         request.resource.data.secretCode is string &&
         (privileged() || (request.resource.data.secretCode.size() == 18 && request.resource.data.maxMembers <= 20) ||
@@ -149,7 +149,7 @@ service cloud.firestore {
       match /members/{uid} {
         allow read: if privileged() || (activeUser() && forumAvailable(forumId) &&
           (request.auth.uid == uid || forumOwner(forumId)));
-        allow create: if activeUser() && forumAvailable(forumId) && request.auth.uid == uid &&
+        allow create: if (privileged() || activeUser()) && forumAvailable(forumId) && request.auth.uid == uid &&
           request.resource.data.username is string && request.resource.data.displayName is string;
         allow update: if privileged() || (activeUser() && self(uid));
         allow delete: if privileged() || (forumOwner(forumId) && uid != request.auth.uid) || self(uid);

@@ -213,7 +213,7 @@ $("createForm").onsubmit=async e=>{
     const premium=isPremiumActive(profile.premiumUntil), unlimited=canAdmin();
     const maxAllowed=unlimited?Number.MAX_SAFE_INTEGER:(premium?400:20);
     if(max<2||(!unlimited && max>maxAllowed))return toast(unlimited?"Jumlah anggota harus minimal 2.":premium?"Jumlah anggota Premium harus 2–400.":"Akun biasa hanya dapat membuat forum sampai 20 anggota.");
-    if(custom&&!premium&&!unlimited)return toast("Custom code hanya untuk Premium.");
+    if(custom&&!premium&&!unlimited)return toast("Custom code hanya untuk Premium/Admin/Author.");
     const secret=custom||randomCode();
     if(!custom && secret.length!==18)throw new Error("Gagal membuat secret code 18 karakter.");
     const forumRef=doc(collection(db,"forums"));
@@ -238,7 +238,13 @@ $("createForm").onsubmit=async e=>{
       $("copyCreatedCode").onclick=async()=>{ const ok=await copyText(secret); toast(ok?"Secret code disalin.":"Gagal menyalin. Silakan salin manual."); };
     }
     toast("Forum berhasil dibuat. Secret code sudah ditampilkan di bawah form.",5000); loadForums();
-  }catch(err){ toast(err.message.replace("Firebase: ","")); }
+  }catch(err){
+    console.error("createForum:", err);
+    const msg=err?.code==="permission-denied"
+      ? "Tidak punya izin Firestore. Pastikan akun sudah aktif sebagai Admin/Author dan firestore.rules terbaru sudah di-deploy."
+      : (err.message||"Gagal membuat forum.").replace("Firebase: ","");
+    toast(msg,7000);
+  }
 };
 $("joinForm").onsubmit=async e=>{
   e.preventDefault();
