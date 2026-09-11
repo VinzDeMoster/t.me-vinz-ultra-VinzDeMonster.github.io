@@ -28,7 +28,7 @@
         <label id="displayNameWrap" class="hidden">Nama tampilan<input id="authDisplayName" maxlength="30" placeholder="Nama yang terlihat di forum"></label>
         <button class="primary wide" type="submit" id="authSubmit">Masuk</button>
       </form>
-      <p class="tiny muted">Username permanen. Nama tampilan bisa diubah kapan saja.</p>
+      <p class="tiny muted">Disarankan untuk membuat akun tanpa ada unsur data pribadi, seperti pakai gmail dan sebagainya.</p>
     </div>
   </div>
 
@@ -72,7 +72,7 @@
       <section id="page-join" class="page hidden">
         <div class="form-card glass narrow">
           <span class="eyebrow">JOIN</span><h2>Masuk ke forum</h2><p class="muted">Masukkan secret code yang kamu dapat dari anggota/admin forum.</p>
-          <form id="joinForm"><label>Secret code<input id="joinCode" required placeholder="Contoh: Q7K4-P9M2"></label><button class="primary wide">Bergabung</button></form>
+          <form id="joinForm"><label>Secret code<input id="joinCode" required placeholder="Masukkan 18 karakter kode"></label><button class="primary wide">Bergabung</button></form>
         </div>
       </section>
 
@@ -82,7 +82,7 @@
           <form id="createForm">
             <label>Nama forum<input id="forumName" required maxlength="60" placeholder="Contoh: Teman Kelas"></label>
             <label>Jumlah anggota<input id="memberLimit" type="number" min="2" max="20" value="10" required><small id="memberLimitNote" class="tiny muted">Akun biasa: batas maksimal 20 anggota.</small></label>
-            <label>Secret code <span id="premiumHint" class="badge">AUTO</span><input id="secretCode" maxlength="24" placeholder="Kosongkan untuk kode acak"></label>
+            <label>Secret code <span id="premiumHint" class="badge">AUTO</span><input id="secretCode" maxlength="40" placeholder="Premium dapat membuat kode sendiri; biasa otomatis 18 karakter"></label>
             <div id="customCodeNote" class="notice">Kode custom hanya aktif untuk akun Premium. Akun biasa akan mendapatkan kode acak.</div>
             <button class="primary wide">Buat Forum</button>
           </form>
@@ -102,7 +102,7 @@
           <div class="activation-card">
             <h3>Aktivasi Premium</h3>
             <p class="muted">Masukkan kode aktivasi yang diberikan setelah pembayaran kamu diverifikasi.</p>
-            <form id="activationForm"><div class="activation-row"><input id="activationCode" maxlength="32" placeholder="Contoh: PREM-ABCD-1234" autocomplete="off"><button class="primary">Aktifkan</button></div></form>
+            <form id="activationForm"><div class="activation-row"><input id="activationCode" maxlength="20" minlength="20" placeholder="20 karakter kode aktivasi" autocomplete="off"><button class="primary">Aktifkan</button></div></form>
             <div id="activationStatus" class="notice hidden"></div>
           </div>
           <hr>

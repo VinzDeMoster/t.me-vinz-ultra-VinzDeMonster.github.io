@@ -100,7 +100,7 @@ service cloud.firestore {
     }
 
     match /forums/{forumId} {
-      allow read: if admin() || (allowedUser() && forumAvailable(forumId) &&
+      allow read: if admin() || (allowedUser() &&
         (request.auth.uid in resource.data.get("memberIds", []) ||
          get(/databases/$(database)/documents/forumCodes/$(resource.data.secretCode)).data.forumId == forumId));
       allow create: if activeUser() && request.resource.data.ownerId == request.auth.uid &&
