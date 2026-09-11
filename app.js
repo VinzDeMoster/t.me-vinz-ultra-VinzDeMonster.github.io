@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updatePassword } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, collection, query, where, orderBy, onSnapshot, getDocs, serverTimestamp, runTransaction, limit, deleteDoc } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, collection, query, where, orderBy, onSnapshot, getDocs, serverTimestamp, runTransaction, limit, deleteDoc, writeBatch } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
 
 /*
   1) Buat Firebase project.
@@ -24,6 +24,11 @@ const db = getFirestore(app);
 
 const $ = id => document.getElementById(id);
 let currentUser = null, profile = null, activeForum = null, unsubscribeMessages = null, unsubscribeProfile = null, unsubscribeActivations = null, unsubscribeInbox = null, authMode = "login";
+// Website creator / Author. Securely configure this UID, or create authors/{UID} with enabled:true in Firestore.
+const AUTHOR_UID = "REPLACE_WITH_WEBSITE_CREATOR_UID";
+const isAuthor = () => !!profile?.isAuthor;
+const canAdmin = () => isAuthor() || !!profile?.isAdmin;
+const roleBadgeHTML = role => role === "author" ? '<span class="role-badge author">AUTHOR</span>' : role === "admin" ? '<span class="role-badge admin">ADMIN</span>' : '';
 
 const toast = (msg,duration=2500) => { $("toast").textContent = msg; $("toast").classList.add("show"); setTimeout(()=>$("toast").classList.remove("show"),duration); };
 const esc = s => String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));
@@ -34,7 +39,7 @@ const premiumUntilMillis = value => {
   return 0;
 };
 const isPremiumActive = value => premiumUntilMillis(value) > Date.now();
-const canUsePremium = () => !!profile?.isAdmin || isPremiumActive(profile?.premiumUntil);
+const canUsePremium = () => canAdmin() || isPremiumActive(profile?.premiumUntil);
 const premiumBadgeLevel = count => {
   const n = Number(count || 0);
   if (n >= 4) return "green";
@@ -51,18 +56,20 @@ const activationCode = () => randomChars(20);
 const emailForUsername = u => `${u.trim().toLowerCase().replace(/[^a-z0-9._-]/g,"_")}@secretforum.local`;
 
 function updateMemberLimitUI(){
-  const input=$("memberLimit"), note=$("memberLimitNote"), code=$("secretCode"), hint=$("premiumHint"), customNote=$("customCodeNote"), premium=isPremiumActive(profile?.premiumUntil);
+  const input=$("memberLimit"), note=$("memberLimitNote"), code=$("secretCode"), hint=$("premiumHint"), customNote=$("customCodeNote");
   if(!input)return;
-  input.max=premium?400:20;
-  if(Number(input.value)>Number(input.max)) input.value=input.max;
-  if(note) note.textContent=premium ? "Premium: kamu bisa mengatur batas 2–400 anggota." : "Akun biasa: batas maksimal 20 anggota.";
+  const premium=isPremiumActive(profile?.premiumUntil), unlimited=canAdmin();
+  input.removeAttribute("max");
+  if(!unlimited) input.max=premium?400:20;
+  if(!unlimited && Number(input.value)>Number(input.max)) input.value=input.max;
+  if(note) note.textContent=unlimited ? "Admin/Author: bebas menentukan jumlah anggota forum." : premium ? "Premium: kamu bisa mengatur batas 2–400 anggota." : "Akun biasa: batas maksimal 20 anggota.";
   if(code){
-    code.disabled=!premium;
-    code.value=premium?code.value:"";
-    code.placeholder=premium?"Opsional: buat secret code sendiri":"Otomatis dibuat 18 karakter oleh sistem";
+    code.disabled=!premium && !unlimited;
+    code.value=(premium||unlimited)?code.value:"";
+    code.placeholder=(premium||unlimited)?"Opsional: buat secret code sendiri":"Otomatis dibuat 18 karakter oleh sistem";
   }
-  if(hint){hint.textContent=premium?"CUSTOM":"AUTO";hint.classList.toggle("hidden",false);}
-  if(customNote) customNote.textContent=premium ? "Premium dapat menentukan secret code sendiri. Akun biasa mendapatkan kode acak 18 karakter." : "Kode akun biasa dibuat otomatis 18 karakter dan tidak dapat diubah.";
+  if(hint){hint.textContent=(premium||unlimited)?"CUSTOM":"AUTO";hint.classList.toggle("hidden",false);}
+  if(customNote) customNote.textContent=(premium||unlimited) ? "Premium dapat menentukan secret code sendiri. Admin/Author memiliki akses penuh." : "Kode akun biasa dibuat otomatis 18 karakter dan tidak dapat diubah.";
 }
 function showPage(name){
   document.querySelectorAll(".page").forEach(x=>x.classList.add("hidden"));
@@ -70,7 +77,7 @@ function showPage(name){
   document.querySelectorAll(".nav").forEach(x=>x.classList.toggle("active",x.dataset.page===name));
   const titles={home:["Beranda","Kelola forum rahasiamu."],join:["Bergabung Forum","Masukkan secret code untuk bergabung."],create:["Buat Forum","Buat ruang privat baru."],settings:["Pengaturan","Kelola akun dan keamanan."],inbox:["Inbox","Informasi dan pesan penting akun."],contact:["Premium","Pilih paket Premium."],payment:["Pembayaran Premium","Selesaikan pembayaran Premium."],admin:["Admin Panel","Kelola user, premium, dan akses admin."],forum:["Forum","Obrolan teks privat."]};
   $("pageTitle").textContent=titles[name]?.[0]||"Secret Forum"; $("pageSubtitle").textContent=titles[name]?.[1]||"";
-  if(name==="admin" && profile?.isAdmin){ loadAdminForums(); loadSupportRequests(); }
+  if(name==="admin" && canAdmin()){ loadAdminForums(); loadSupportRequests(); }
   if(name==="inbox" && currentUser) loadInbox();
   if(name==="settings" && currentUser) loadActivationStatus();
   if(name==="create") updateMemberLimitUI();
@@ -80,30 +87,32 @@ function setLoggedInUI(){
   $("authView").classList.add("hidden"); $("appView").classList.remove("hidden");
   $("sidebarName").textContent=profile.displayName; $("sidebarUsername").textContent="@"+profile.username; $("avatar").textContent=(profile.displayName||"?")[0].toUpperCase();
   $("settingsUsername").value=profile.username; $("settingsDisplayName").value=profile.displayName;
+  const roleEl=$("sidebarRole"); if(roleEl){ roleEl.classList.toggle("hidden",!(profile.isAuthor||profile.isAdmin)); roleEl.textContent=profile.isAuthor?"AUTHOR":"ADMIN"; }
   const premiumActive=isPremiumActive(profile.premiumUntil);
   $("sidebarPremium").classList.toggle("hidden",!premiumActive);
-  $("adminNav").classList.toggle("hidden",!profile.isAdmin); $("adminSettingsCard").classList.toggle("hidden",!profile.isAdmin);
-  const status=profile.isAdmin?"ADMIN":(premiumActive?"PREMIUM":"BIASA");
-  const detail=profile.isAdmin?"Akun memiliki akses administrasi.":(premiumActive?"Premium aktif sampai "+new Date(premiumUntilMillis(profile.premiumUntil)).toLocaleString("id-ID"):"Akun biasa tanpa Premium.");
+  $("adminNav").classList.toggle("hidden",!canAdmin()); $("adminSettingsCard").classList.toggle("hidden",!canAdmin()); $("authorControls")?.classList.toggle("hidden",!isAuthor());
+  const status=profile.isAuthor?"AUTHOR":(profile.isAdmin?"ADMIN":(premiumActive?"PREMIUM":"BIASA"));
+  const detail=profile.isAuthor?"Author • pemilik website • otoritas tertinggi.":(profile.isAdmin?"Akun memiliki akses administrasi.":(premiumActive?"Premium aktif sampai "+new Date(premiumUntilMillis(profile.premiumUntil)).toLocaleString("id-ID"):"Akun biasa tanpa Premium."));
   $("accountStatus").textContent=status; $("accountStatusDetail").textContent=detail;
   loadForums(); updateMemberLimitUI(); loadActivationStatus(); loadInbox(); showPage("home");
 }
 async function loadProfile(user){
   const snap=await getDoc(doc(db,"users",user.uid));
   if(!snap.exists()){ await signOut(auth); throw new Error("Profil user tidak ditemukan."); }
-  const adminSnap=await getDoc(doc(db,"admins",user.uid));
+  const [adminSnap,authorSnap]=await Promise.all([getDoc(doc(db,"admins",user.uid)),getDoc(doc(db,"authors",user.uid))]);
   const data=snap.data();
-  const isAdmin=(adminSnap.exists()&&adminSnap.data().enabled===true) || data.isAdmin===true;
+  const isAuthor=(AUTHOR_UID && AUTHOR_UID!=="REPLACE_WITH_WEBSITE_CREATOR_UID" && user.uid===AUTHOR_UID) || (authorSnap.exists()&&authorSnap.data().enabled===true);
+  const isAdmin=!isAuthor && ((adminSnap.exists()&&adminSnap.data().enabled===true) || data.isAdmin===true);
   const suspendedUntil=premiumUntilMillis(data.suspendedUntil);
-  if(!isAdmin && data.banned===true){
+  if(!isAuthor && !isAdmin && data.banned===true){
     await signOut(auth);
     throw new Error("Akun kamu telah dibanned oleh admin.");
   }
-  if(!isAdmin && suspendedUntil>Date.now()){
+  if(!isAuthor && !isAdmin && suspendedUntil>Date.now()){
     await signOut(auth);
     throw new Error("Akun kamu sedang disuspend sampai "+new Date(suspendedUntil).toLocaleString("id-ID")+".");
   }
-  profile={uid:user.uid,...data,premiumPurchases:Number(data.premiumPurchases||0),isAdmin};
+  profile={uid:user.uid,...data,premiumPurchases:Number(data.premiumPurchases||0),isAdmin,isAuthor};
   if(unsubscribeProfile)unsubscribeProfile();
   if(unsubscribeActivations)unsubscribeActivations();
   unsubscribeActivations=null;
@@ -111,7 +120,7 @@ async function loadProfile(user){
     if(!s.exists())return;
     const latest=s.data();
     const until=premiumUntilMillis(latest.suspendedUntil);
-    if(!profile.isAdmin && (latest.banned===true || until>Date.now())){
+    if(!profile.isAuthor && !profile.isAdmin && (latest.banned===true || until>Date.now())){
       const reason=latest.banned===true?"Akun kamu telah dibanned oleh admin.":"Akun kamu sedang disuspend sampai "+new Date(until).toLocaleString("id-ID")+".";
       if(unsubscribeProfile)unsubscribeProfile();
       unsubscribeProfile=null;
@@ -167,8 +176,9 @@ function loadInbox(){
     const unread=docs.filter(d=>d.data().read!==true).length;
     badge?.classList.toggle("hidden",unread===0); if(badge)badge.textContent=unread;
     if(!box)return;
-    box.innerHTML=docs.map(d=>{const r=d.data();return `<div class="inbox-item ${r.read===true?"read":"unread"}"><div><span class="eyebrow">${esc(r.title||"INFORMASI")}</span><h3>${esc(r.subject||"Pesan dari Admin")}</h3><p class="muted">${esc(r.message||"").replace(/\n/g,"<br>")}</p><span class="tiny muted">${r.createdAt?.toDate?.().toLocaleString("id-ID")||"baru saja"}</span></div>${r.read===true?"":`<button class="secondary" data-read-inbox="${d.id}">Tandai dibaca</button>`}</div>`}).join("")||`<div class="notice">Belum ada pesan masuk.</div>`;
+    box.innerHTML=docs.map(d=>{const r=d.data();return `<div class="inbox-item ${r.read===true?"read":"unread"}"><div><span class="eyebrow">${esc(r.title||"INFORMASI")}</span><h3>${esc(r.subject||"Pesan dari Admin")}</h3><p class="muted">${esc(r.message||"").replace(/\n/g,"<br>")}</p><span class="tiny muted">${r.createdAt?.toDate?.().toLocaleString("id-ID")||"baru saja"}</span></div><div class="inbox-actions">${r.read===true?"":`<button class="secondary" data-read-inbox="${d.id}">Tandai dibaca</button>`}<button class="secondary" data-delete-inbox="${d.id}">Hapus</button></div></div>`}).join("")||`<div class="notice">Belum ada pesan masuk.</div>`;
     box.querySelectorAll("[data-read-inbox]").forEach(b=>b.onclick=async()=>{try{await updateDoc(doc(db,"inbox",b.dataset.readInbox),{read:true});}catch(e){toast(e.message.replace("Firebase: ",""));}});
+    box.querySelectorAll("[data-delete-inbox]").forEach(b=>b.onclick=async()=>{try{await deleteDoc(doc(db,"inbox",b.dataset.deleteInbox));toast("Pesan inbox dihapus.");}catch(e){toast(e.message.replace("Firebase: ",""));}});
   },err=>console.warn("Inbox listener:",err));
 }
 $("activationForm").onsubmit=async e=>{
@@ -198,10 +208,10 @@ $("createForm").onsubmit=async e=>{
   try{
     const name=$("forumName").value.trim(), max=Number($("memberLimit").value), custom=$("secretCode").value.trim();
     if(!name)return toast("Nama forum wajib diisi.");
-    const premium=isPremiumActive(profile.premiumUntil);
-    const maxAllowed=premium?400:20;
-    if(max<2||max>maxAllowed)return toast(premium?"Jumlah anggota Premium harus 2–400.":"Akun biasa hanya dapat membuat forum sampai 20 anggota.");
-    if(custom&&!premium)return toast("Custom code hanya untuk Premium.");
+    const premium=isPremiumActive(profile.premiumUntil), unlimited=canAdmin();
+    const maxAllowed=unlimited?Number.MAX_SAFE_INTEGER:(premium?400:20);
+    if(max<2||(!unlimited && max>maxAllowed))return toast(unlimited?"Jumlah anggota harus minimal 2.":premium?"Jumlah anggota Premium harus 2–400.":"Akun biasa hanya dapat membuat forum sampai 20 anggota.");
+    if(custom&&!premium&&!unlimited)return toast("Custom code hanya untuk Premium/Admin/Author.");
     const secret=custom||randomCode();
     if(!custom && secret.length!==18)throw new Error("Gagal membuat secret code 18 karakter.");
     const forumRef=doc(collection(db,"forums"));
@@ -217,7 +227,7 @@ $("createForm").onsubmit=async e=>{
     const createdBox=$("createdCodeNotice");
     if(createdBox){
       createdBox.classList.remove("hidden");
-      createdBox.innerHTML=`<b>Forum berhasil dibuat.</b><br><span class="tiny muted">Secret code (18 karakter):</span><div class="created-code-row"><code>${esc(secret)}</code><button type="button" class="secondary" id="copyCreatedCode">Salin</button></div>`;
+      createdBox.innerHTML=`<b>Forum berhasil dibuat.</b><br><span class="tiny muted">Secret code forum:</span><div class="created-code-row"><code>${esc(secret)}</code><button type="button" class="secondary" id="copyCreatedCode">Salin</button></div><span class="tiny muted">Kode ini wajib disimpan untuk bergabung ke forum.</span>`;
       $("copyCreatedCode").onclick=()=>navigator.clipboard.writeText(secret).then(()=>toast("Secret code disalin."));
     }
     toast("Forum berhasil dibuat. Secret code sudah ditampilkan di bawah form.",5000); loadForums();
@@ -234,7 +244,7 @@ $("joinForm").onsubmit=async e=>{
     const ref=doc(db,"forums",forumId);
     const s=await getDoc(ref);
     if(!s.exists())return toast("Forum tidak ditemukan.");
-    const data=s.data(); if(!profile.isAdmin && data.banned===true)return toast("Forum ini telah dibanned oleh admin. Status: permanen.",7000); if(!profile.isAdmin && premiumUntilMillis(data.suspendedUntil)>Date.now())return toast("Forum ini sedang disuspend sampai "+new Date(premiumUntilMillis(data.suspendedUntil)).toLocaleString("id-ID")+".",7000); const existingMembers=data.memberIds||[];
+    const data=s.data(); if(!canAdmin() && data.banned===true)return toast("Forum ini telah dibanned oleh admin. Status: permanen.",7000); if(!canAdmin() && premiumUntilMillis(data.suspendedUntil)>Date.now())return toast("Forum ini sedang disuspend sampai "+new Date(premiumUntilMillis(data.suspendedUntil)).toLocaleString("id-ID")+".",7000); const existingMembers=data.memberIds||[];
     if(existingMembers.includes(currentUser.uid)){openForum(forumId,data);return}
     if(existingMembers.length>=data.maxMembers)return toast("Forum sudah penuh.");
     await runTransaction(db,async tx=>{
@@ -251,19 +261,24 @@ $("joinForm").onsubmit=async e=>{
   }catch(err){ toast(err.message.replace("Firebase: ","")); }
 };
 async function loadForums(){
-  const owned=await getDocs(query(collection(db,"forums"),where("ownerId","==",currentUser.uid)));
-  const joined=await getDocs(query(collection(db,"forums"),where("memberIds","array-contains",currentUser.uid)));
-  const map=new Map(); [...owned.docs,...joined.docs].forEach(d=>{const f={id:d.id,...d.data()}; map.set(d.id,f);});
-  $("forumList").innerHTML=[...map.values()].map(f=>{const suspended=premiumUntilMillis(f.suspendedUntil)>Date.now(); const status=f.banned?"BANNED • PERMANEN":(suspended?"SUSPENDED • SAMPAI "+new Date(premiumUntilMillis(f.suspendedUntil)).toLocaleString("id-ID"):"AKTIF"); return `<div class="forum-card glass"><span class="eyebrow">PRIVATE FORUM</span><h3>${esc(f.name)}</h3><p class="muted">${(f.memberIds||[]).length}/${f.maxMembers} anggota</p><p class="code">${esc(f.secretCode)}</p><p class="forum-status ${f.banned?"banned":suspended?"suspended":"active"}">${esc(status)}</p><button class="secondary wide" data-open="${f.id}">Buka forum</button></div>`}).join("")||`<div class="form-card glass"><h3>Belum ada forum</h3><p class="muted">Buat forum baru atau bergabung dengan secret code.</p></div>`;
-  document.querySelectorAll("[data-open]").forEach(b=>b.onclick=async()=>{const s=await getDoc(doc(db,"forums",b.dataset.open)); if(s.exists())openForum(s.id,s.data())});
+  try{
+    const owned=await getDocs(query(collection(db,"forums"),where("ownerId","==",currentUser.uid)));
+    const joined=await getDocs(query(collection(db,"forums"),where("memberIds","array-contains",currentUser.uid)));
+    const map=new Map(); [...owned.docs,...joined.docs].forEach(d=>{const f={id:d.id,...d.data()}; map.set(d.id,f);});
+    $("forumList").innerHTML=[...map.values()].map(f=>{const suspended=premiumUntilMillis(f.suspendedUntil)>Date.now(); const status=f.banned?"BANNED • PERMANEN":(suspended?"SUSPENDED • SAMPAI "+new Date(premiumUntilMillis(f.suspendedUntil)).toLocaleString("id-ID"):"AKTIF"); return `<div class="forum-card glass"><span class="eyebrow">PRIVATE FORUM</span><h3>${esc(f.name)}</h3><p class="muted">${(f.memberIds||[]).length}/${f.maxMembers||"∞"} anggota</p><p class="code">Secret code: ${esc(f.secretCode||"Belum tersedia")}</p><p class="forum-status ${f.banned?"banned":suspended?"suspended":"active"}">${esc(status)}</p><button class="secondary wide" data-open="${f.id}">Buka forum</button></div>`}).join("")||`<div class="form-card glass"><h3>Belum ada forum</h3><p class="muted">Buat forum baru atau bergabung dengan secret code.</p></div>`;
+    document.querySelectorAll("[data-open]").forEach(b=>b.onclick=async()=>{try{const s=await getDoc(doc(db,"forums",b.dataset.open)); if(s.exists())openForum(s.id,s.data()); else toast("Forum tidak ditemukan.");}catch(err){toast(err.message.replace("Firebase: ",""));}});
+  }catch(err){
+    console.error("loadForums:",err);
+    $("forumList").innerHTML=`<div class="notice">Gagal memuat forum: ${esc(err.message.replace("Firebase: ",""))}</div>`;
+  }
 }
 function openForum(id,data){
-  if(!profile?.isAdmin && data.banned===true)return toast("Forum ini telah dibanned oleh admin. Status: permanen.",7000);
+  if(!canAdmin() && data.banned===true)return toast("Forum ini telah dibanned oleh admin. Status: permanen.",7000);
   const su=premiumUntilMillis(data.suspendedUntil);
-  if(!profile?.isAdmin && su>Date.now())return toast("Forum ini sedang disuspend sampai "+new Date(su).toLocaleString("id-ID")+".",7000);
+  if(!canAdmin() && su>Date.now())return toast("Forum ini sedang disuspend sampai "+new Date(su).toLocaleString("id-ID")+".",7000);
   activeForum={id,...data}; showPage("forum");
   $("activeForumName").textContent=data.name;
-  $("activeForumMeta").textContent=`${(data.memberIds||[]).length}/${data.maxMembers} anggota • kode ${data.secretCode}`;
+  $("activeForumMeta").textContent=`${(data.memberIds||[]).length}/${data.maxMembers||"∞"} anggota • kode ${data.secretCode||"kode belum tersedia"}`;
   const isOwner=currentUser.uid===data.ownerId;
   $("ownerControls").classList.toggle("hidden",!isOwner);
   $("ownerModeBtn").textContent=data.ownerOnly?"Aktif • ON":"Nonaktif • OFF";
@@ -274,14 +289,11 @@ function openForum(id,data){
     $("messageInput").placeholder=locked?"Chat dikunci oleh owner…":"Tulis pesan teks…";
     $("messageForm").classList.toggle("locked",locked);
   };
-  const composerLocked=data.ownerOnly===true && !isOwner && !profile.isAdmin;
+  const composerLocked=data.ownerOnly===true && !isOwner && !canAdmin();
   setComposerState(composerLocked);
-  const translatorAllowed=canUsePremium();
-  $("translatorBody").classList.toggle("hidden",!translatorAllowed);
-  $("translatorLocked").classList.toggle("hidden",translatorAllowed);
   $("copyCodeBtn").onclick=()=>navigator.clipboard.writeText(data.secretCode).then(()=>toast("Kode disalin."));
   $("leaveForumBtn").onclick=async()=>{
-    if(profile.isAdmin)return;
+    if(canAdmin())return;
     if(!confirm(isOwner?"Keluar dari forum? Kamu tetap tercatat sebagai owner dan dapat mengakses/mengelola forum lagi nanti.":"Keluar dari forum ini?"))return;
     try{await runTransaction(db,async tx=>{const ref=doc(db,"forums",id),snap=await tx.get(ref);if(!snap.exists())throw new Error("Forum tidak ditemukan.");const d=snap.data(), members=d.memberIds||[];tx.update(ref,{memberIds:members.filter(x=>x!==currentUser.uid)});tx.delete(doc(db,"forums",id,"members",currentUser.uid));}); toast(isOwner?"Kamu keluar sebagai anggota. Status owner tetap." : "Kamu keluar dari forum."); showPage("home"); loadForums();}catch(err){toast(err.message.replace("Firebase: ",""));}};
   $("ownerModeBtn").onclick=async()=>{
@@ -290,7 +302,7 @@ function openForum(id,data){
       await updateDoc(doc(db,"forums",id),{ownerOnly:next});
       activeForum.ownerOnly=next; $("ownerModeBtn").textContent=next?"Aktif • ON":"Nonaktif • OFF";
       $("ownerModeHint").textContent=next?"Mode aktif: hanya owner yang dapat mengirim chat.":"Mode nonaktif: semua anggota dapat mengirim chat.";
-      const locked=next && currentUser.uid!==activeForum.ownerId && !profile.isAdmin;
+      const locked=next && currentUser.uid!==activeForum.ownerId && !canAdmin();
       setComposerState(locked);
       toast(next?"Sekarang hanya owner yang dapat mengirim.":"Semua anggota dapat mengirim pesan.");
     }catch(err){toast(err.message.replace("Firebase: ",""));}
@@ -315,7 +327,7 @@ function openForum(id,data){
             tx.delete(doc(db,"forums",id,"members",btn.dataset.kick));
           });
           const latest=await getDoc(doc(db,"forums",id)); activeForum={id,...latest.data()};
-          $("activeForumMeta").textContent=`${activeForum.memberIds.length}/${activeForum.maxMembers} anggota • kode ${activeForum.secretCode}`;
+          $("activeForumMeta").textContent=`${activeForum.memberIds.length}/${activeForum.maxMembers||"∞"} anggota • kode ${activeForum.secretCode||"kode belum tersedia"}`;
           renderMembers(); toast("Anggota dikeluarkan.");
         }catch(err){toast(err.message.replace("Firebase: ",""));}
       });
@@ -327,12 +339,13 @@ function openForum(id,data){
   unsubscribeMessages=onSnapshot(q,s=>{
     const box=$("messages");
     box.innerHTML=s.docs.map(d=>{
-      const m=d.data(), me=m.uid===currentUser.uid, canDelete=me||profile.isAdmin===true;
+      const m=d.data(), me=m.uid===currentUser.uid, canDelete=me||canAdmin();
+      const authorBadge=m.isAuthor?roleBadgeHTML("author"):"";
       const verified=m.isAdmin?'<span class="verified" title="Admin terverifikasi" aria-label="Admin terverifikasi"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.2 16.7 4.8 12.3l-1.9-1.9 6.3 6.3L21.2 8.5l-1.9-1.9z"/></svg></span>':'';
       const premiumBadge=premiumBadgeHTML(premiumBadgeLevel(m.premiumPurchases));
       const deleteButton=canDelete?`<button class="msg-delete" data-delete-message="${d.id}" title="Hapus pesan" aria-label="Hapus pesan">🗑</button>`:"";
       const translateButton=canUsePremium()?`<button class="msg-translate" data-translate-message="${d.id}">✦ Terjemahkan</button>`:"";
-      return `<div class="msg ${me?"me":""}" data-original-text="${esc(m.text)}"><div class="msg-head"><div class="msg-name">${esc(m.displayName||"User")} ${verified} ${premiumBadge}</div>${deleteButton}</div><div class="msg-text">${esc(m.text).replace(/\n/g,"<br>")}</div><div class="msg-tools">${translateButton}</div><div class="msg-time">${m.createdAt?.toDate?.().toLocaleString("id-ID")||"baru saja"}</div></div>`;
+      return `<div class="msg ${me?"me":""}" data-original-text="${esc(m.text)}"><div class="msg-head"><div class="msg-name">${esc(m.displayName||"User")} ${authorBadge} ${verified} ${premiumBadge}</div>${deleteButton}</div><div class="msg-text">${esc(m.text).replace(/\n/g,"<br>")}</div><div class="msg-tools">${translateButton}</div><div class="msg-time">${m.createdAt?.toDate?.().toLocaleString("id-ID")||"baru saja"}</div></div>`;
     }).join("");
     box.querySelectorAll("[data-delete-message]").forEach(btn=>btn.onclick=async()=>{
       if(!activeForum)return;
@@ -424,20 +437,13 @@ function decodeSecret(v,type){
   try{const normalized=x.replace(/-/g,"+").replace(/_/g,"/").replace(/\s/g,"");if(/^[A-Za-z0-9+/]+={0,2}$/.test(normalized)&&normalized.length>=4&&normalized.length%4===0){const out=atob(normalized);if(out && /[\x20-\x7E]/.test(out))return out;}}catch(e){}
   return "Sandi belum dikenali. Pilih jenis sandi secara manual.";
 }
-function translateSecret(){
-  if(!canUsePremium())return toast("Fitur terjemahan hanya untuk Premium.");
-  const input=$("translatorInput").value.trim(),type=$("translatorType").value;
-  if(!input)return toast("Masukkan sandi terlebih dahulu.");
-  const result=decodeSecret(input,type);const box=$("translatorResult");box.textContent=result;box.classList.remove("hidden");
-}
-$("translateBtn")?.addEventListener("click",translateSecret);
 $("messageForm").onsubmit=async e=>{
   e.preventDefault();
   const input=$("messageInput"),text=input.value.trim();
   if(!text||!activeForum)return;
-  if(activeForum.ownerOnly===true && activeForum.ownerId!==currentUser.uid && !profile.isAdmin)return toast("Hanya owner yang dapat mengirim pesan.");
+  if(activeForum.ownerOnly===true && activeForum.ownerId!==currentUser.uid && !canAdmin())return toast("Hanya owner yang dapat mengirim pesan.");
   try{
-    await addDoc(collection(db,"forums",activeForum.id,"messages"),{uid:currentUser.uid,displayName:profile.displayName,isAdmin:profile.isAdmin===true,premiumPurchases:Number(profile.premiumPurchases||0),text:text.slice(0,1000),createdAt:serverTimestamp()});
+    await addDoc(collection(db,"forums",activeForum.id,"messages"),{uid:currentUser.uid,displayName:profile.displayName,isAdmin:profile.isAdmin===true,isAuthor:profile.isAuthor===true,premiumPurchases:Number(profile.premiumPurchases||0),text:text.slice(0,1000),createdAt:serverTimestamp()});
     input.value=""; input.style.height="auto";
   }catch(err){toast(err.message.replace("Firebase: ",""));}
 };
@@ -469,20 +475,16 @@ $("paidBtn").onclick=async()=>{
 };
 
 async function loadAdminForums(){
-  if(!profile?.isAdmin)return;
+  if(!canAdmin())return;
   try{
     const s=await getDocs(collection(db,"forums"));
-    const forums=s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>{
-      const at=a.createdAt?.toMillis?.()||0, bt=b.createdAt?.toMillis?.()||0;
-      return bt-at;
-    });
-    $("adminForumResults").innerHTML=forums.map((f,i)=>`<div class="notice" style="margin:8px 0;display:flex;justify-content:space-between;align-items:center;gap:12px"><span><span class="tiny muted">FORUM ${i+1}</span><br><b class="code">${esc(f.secretCode||"-")}</b></span><span class="tiny muted">${(f.memberIds||[]).length}/${f.maxMembers||"-"} • ${f.banned?"BANNED":(premiumUntilMillis(f.suspendedUntil)>Date.now()?"SUSPENDED":"AKTIF")}</span></div>`).join("")||`<div class="notice">Belum ada forum.</div>`;
-  }catch(err){
-    $("adminForumResults").textContent="Gagal memuat forum: "+err.message.replace("Firebase: ","");
-  }
+    const forums=s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAt?.toMillis?.()||0)-(a.createdAt?.toMillis?.()||0));
+    $("adminForumResults").innerHTML=forums.map((f,i)=>`<div class="notice admin-forum-row"><span><span class="tiny muted">FORUM ${i+1}</span><br><b class="code">${esc(f.secretCode||"-")}</b><br><span class="tiny muted">${esc(f.name||"Forum")}</span></span><span class="admin-forum-actions"><span class="tiny muted">${(f.memberIds||[]).length}/${f.maxMembers||"∞"} • ${f.banned?"BANNED":(premiumUntilMillis(f.suspendedUntil)>Date.now()?"SUSPENDED":"AKTIF")}</span>${isAuthor()?`<button class="secondary" data-author-delete-forum="${esc(f.secretCode||"")}">Hapus forum</button>`:""}</span></div>`).join("")||`<div class="notice">Belum ada forum.</div>`;
+    document.querySelectorAll("[data-author-delete-forum]").forEach(b=>b.onclick=()=>authorDeleteForum(b.dataset.authorDeleteForum));
+  }catch(err){$("adminForumResults").textContent="Gagal memuat forum: "+err.message.replace("Firebase: ","");}
 }
 async function loadSupportRequests(){
-  if(!profile?.isAdmin)return;
+  if(!canAdmin())return;
   try{
     const s=await getDocs(query(collection(db,"supportRequests"),orderBy("createdAt","desc"),limit(30)));
     $("supportResults").innerHTML=s.docs.map(d=>{const r=d.data(); const t=r.createdAt?.toDate?.().toLocaleString("id-ID")||"baru saja"; const ready=r.status==="ready"; const done=r.status==="done"; const action=ready?`<div><span class="tiny muted">Kode aktivasi (20 karakter): </span><b class="activation-code">${esc(r.activationCode||"-")}</b></div><div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button class="secondary" onclick="navigator.clipboard?.writeText('${esc(r.activationCode||"")}');toast('Kode disalin.')">Salin kode</button><button class="secondary" onclick="adminCloseSupport('${d.id}')">Tandai selesai</button></div>`:(done?`<span class="tiny muted">Selesai</span>`:`<button class="secondary" onclick="adminVerifyPremium('${d.id}')">Verifikasi & buat kode</button>`); return `<div class="notice" style="margin:8px 0"><b>@${esc(r.username||"user")}</b> — ${esc(r.displayName||"")}<br>Paket: <b>${esc(r.plan||"Premium")}</b> (${Number(r.days||0)} hari)<br><span class="tiny muted">${t} • ${esc(r.status||"open")}</span><div style="margin-top:8px">${action}</div></div>`}).join("")||`<div class="notice">Belum ada permintaan Premium.</div>`;
@@ -491,40 +493,74 @@ async function loadSupportRequests(){
 window.adminVerifyPremium=async id=>{try{await runTransaction(db,async tx=>{const reqRef=doc(db,"supportRequests",id);const snap=await tx.get(reqRef);if(!snap.exists())throw new Error("Permintaan tidak ditemukan.");const r=snap.data();if(r.status!=="waiting_verification")throw new Error("Permintaan ini sudah diproses.");const days=Number(r.days||0);if(!r.uid||days<=0)throw new Error("Data pembelian tidak valid.");const code=activationCode(); if(code.length!==20)throw new Error("Gagal membuat kode aktivasi 20 karakter."); const until=new Date(Date.now()+days*86400000);tx.set(doc(db,"premiumActivations",code),{uid:r.uid,plan:r.plan||"Premium",days,premiumUntil:until,used:false,codeLength:20,createdAt:serverTimestamp()});tx.update(reqRef,{status:"ready",activationCode:code,verifiedAt:serverTimestamp()});tx.set(doc(collection(db,"inbox")),{uid:r.uid,title:"PREMIUM",subject:"Kode aktivasi Premium kamu",message:`Pembayaran ${r.plan||"Premium"} telah diverifikasi admin. Kode aktivasi (20 karakter): ${code}. Masukkan kode ini di Pengaturan > Aktivasi Premium.`,activationCode:code,read:false,createdAt:serverTimestamp()});});toast("Pembayaran diverifikasi. Kode aktivasi dibuat dan dikirim ke Inbox.");loadSupportRequests();}catch(err){toast(err.message.replace("Firebase: ",""));}};
 window.adminCloseSupport=async id=>{try{await updateDoc(doc(db,"supportRequests",id),{status:"done",handledAt:serverTimestamp()});toast("Permintaan ditandai selesai.");loadSupportRequests();}catch(err){toast(err.message.replace("Firebase: ",""));}};
 
-$("userSearchForm").onsubmit=async e=>{e.preventDefault();const u=await getUserByUsername($("userSearch").value);$("userResults").innerHTML=u?`<div class="notice"><b>${esc(u.displayName)}</b> @${esc(u.username)}<br>Premium: ${isPremiumActive(u.premiumUntil)?"aktif":"tidak"}<br>Pembelian Premium: ${Number(u.premiumPurchases||0)}<br>Admin: ${u.isAdmin?"ya":"tidak"}<br>Banned: ${u.banned?"ya":"tidak"}<div style="margin-top:10px;display:flex;gap:6px"><button class="secondary" onclick="adminToggleBan('${u.id}',${!u.banned})">${u.banned?"Unban":"Ban"}</button><button class="secondary" onclick="adminSuspend('${u.id}')">Suspend 24h</button><button class="secondary" onclick="adminUnsuspend('${u.id}')">Unsuspend</button></div></div>`:"<div class='notice'>User tidak ditemukan.</div>"};
-window.adminToggleBan=async(uid,value)=>{try{await updateDoc(doc(db,"users",uid),{banned:value});toast(value?"User dibanned.":"Ban dicabut.");}catch(err){toast(err.message.replace("Firebase: ",""));}};
-window.adminSuspend=async uid=>{try{await updateDoc(doc(db,"users",uid),{suspendedUntil:new Date(Date.now()+86400000)});toast("User disuspend 24 jam.");}catch(err){toast(err.message.replace("Firebase: ",""));}};
-window.adminUnsuspend=async uid=>{try{await updateDoc(doc(db,"users",uid),{suspendedUntil:null});toast("Suspend user dicabut.");}catch(err){toast(err.message.replace("Firebase: ",""));}};
-$("forumModerationForm")?.addEventListener("submit",async e=>{e.preventDefault();try{const code=$("moderationCode").value.trim();const mode=$("forumModerationMode").value;if(!code)return toast("Masukkan secret code forum.");const cs=await getDoc(doc(db,"forumCodes",code));if(!cs.exists())return toast("Forum tidak ditemukan.");const ref=doc(db,"forums",cs.data().forumId);const fs=await getDoc(ref);if(!fs.exists())return toast("Forum tidak ditemukan.");const patch={};if(mode==="ban")patch.banned=true;if(mode==="unban")patch.banned=false;if(mode==="suspend")patch.suspendedUntil=new Date(Date.now()+Math.max(1,Number($("forumSuspendHours").value)||24)*3600000);if(mode==="unsuspend")patch.suspendedUntil=null;await updateDoc(ref,patch);toast(mode==="ban"?"Forum dibanned.":mode==="unban"?"Ban forum dicabut.":mode==="suspend"?"Forum disuspend.":"Suspend forum dicabut.");loadAdminForums();}catch(err){toast(err.message.replace("Firebase: ",""));}});
-$("premiumForm").onsubmit=async e=>{
+$("userSearchForm").onsubmit=async e=>{
   e.preventDefault();
   try{
-    const u=await getUserByUsername($("premiumUsername").value);
-    if(!u)return toast("User tidak ditemukan.");
-    const grant=$("premiumMode").value==="grant";
-    const days=Number($("premiumDays").value);
-    if(grant&&(!Number.isFinite(days)||days<=0))return toast("Durasi Premium tidak valid.");
-    const ref=doc(db,"users",u.id);
-    if(grant){
-      const until=new Date(Date.now()+days*86400000);
-      await runTransaction(db,async tx=>{
-        const snap=await tx.get(ref);
-        if(!snap.exists())throw new Error("User tidak ditemukan.");
-        const count=Number(snap.data().premiumPurchases||0)+1;
-        tx.update(ref,{premiumUntil:until,premiumPurchases:count});
-      });
-    }else{
-      await updateDoc(ref,{premiumUntil:null});
-    }
-    toast(grant?"Premium diberikan. Badge Premium bertambah.":"Premium dicabut.");
+    const u=await getUserByUsername($("userSearch").value);
+    if(!u){$("userResults").innerHTML="<div class='notice'>User tidak ditemukan.</div>";return;}
+    const [targetAdminSnap,targetAuthorSnap]=await Promise.all([getDoc(doc(db,"admins",u.id)),getDoc(doc(db,"authors",u.id))]);
+    const targetAuthor=targetAuthorSnap.exists()&&targetAuthorSnap.data().enabled===true;
+    const targetAdmin=(targetAdminSnap.exists()&&targetAdminSnap.data().enabled===true)||u.isAdmin===true;
+    const self=u.id===currentUser.uid;
+    const controls=((isAuthor() && !targetAuthor && !self) || (!isAuthor() && !targetAdmin && !self)) ? `<div class="admin-user-actions">
+      <button class="secondary" onclick="authorOrAdminBanUser('${u.id}')">${u.banned?"Unban":"Ban permanen"}</button>
+      <button class="secondary" onclick="authorOrAdminSuspendUser('${u.id}')">Suspend</button>
+      <button class="secondary" onclick="authorOrAdminUnsuspendUser('${u.id}')">Unsuspend</button>
+      ${isAuthor()?`<button class="secondary" onclick="authorToggleAdmin('${u.id}',${!targetAdmin})">${targetAdmin?"Berhentikan Admin":"Jadikan Admin"}</button>`:""}
+    </div>` : (targetAdmin ? `<div class="notice">Admin tidak dapat mengelola akun Admin lain. Hanya Author yang dapat mengelola Admin.</div>` : `<div class="notice">Akun kamu sendiri tidak dapat dimoderasi dari sini.</div>`);
+    $("userResults").innerHTML=`<div class="notice"><b>${esc(u.displayName)}</b> @${esc(u.username)}<br>Premium: ${isPremiumActive(u.premiumUntil)?"aktif":"tidak"}<br>Pembelian Premium: ${Number(u.premiumPurchases||0)}<br>Role: ${targetAuthor?"Author":(targetAdmin?"Admin":"User")}<br>Banned: ${u.banned?"ya":"tidak"}<div style="margin-top:10px">${controls}</div></div>`;
   }catch(err){toast(err.message.replace("Firebase: ",""));}
 };
-$("adminForm").onsubmit=async e=>{e.preventDefault();try{const u=await getUserByUsername($("adminUsername").value);if(!u)return toast("User tidak ditemukan.");const grant=$("adminMode").value==="grant";await setDoc(doc(db,"admins",u.id),{uid:u.id,username:u.username,enabled:grant,updatedAt:serverTimestamp()},{merge:true});await updateDoc(doc(db,"users",u.id),{isAdmin:grant});toast(grant?"Admin diberikan.":"Admin dicabut.");}catch(err){toast(err.message.replace("Firebase: ",""));}};
+window.authorOrAdminBanUser=async uid=>{
+  try{
+    const target=await getDoc(doc(db,"users",uid)); if(!target.exists())throw new Error("User tidak ditemukan.");
+    const d=target.data();
+    const targetAuthorSnap=await getDoc(doc(db,"authors",uid));
+    if(uid===currentUser.uid)throw new Error("Kamu tidak dapat membanned akun sendiri.");
+    if(targetAuthorSnap.exists()&&targetAuthorSnap.data().enabled===true)throw new Error("Author tidak dapat dibanned.");
+    if(!isAuthor() && d.isAdmin===true)throw new Error("Admin tidak dapat membanned Admin lain. Hanya Author.");
+    const next=!d.banned;
+    await updateDoc(doc(db,"users",uid),{banned:next,suspendedUntil:next?null:d.suspendedUntil||null});
+    toast(next?"User dibanned permanen.":"Ban user dicabut.");
+  }catch(err){toast(err.message.replace("Firebase: ",""));}
+};
+window.authorOrAdminSuspendUser=async uid=>{
+  try{
+    const target=await getDoc(doc(db,"users",uid)); if(!target.exists())throw new Error("User tidak ditemukan.");
+    if(uid===currentUser.uid)throw new Error("Kamu tidak dapat mensuspend akun sendiri.");
+    const targetAuthorSnap=await getDoc(doc(db,"authors",uid));
+    if(targetAuthorSnap.exists()&&targetAuthorSnap.data().enabled===true)throw new Error("Author tidak dapat disuspend.");
+    if(!isAuthor() && target.data().isAdmin===true)throw new Error("Admin tidak dapat mensuspend Admin lain. Hanya Author.");
+    const hours=Math.max(1,Number(prompt("Suspend berapa jam?","24"))||24);
+    await updateDoc(doc(db,"users",uid),{suspendedUntil:new Date(Date.now()+hours*3600000)});
+    toast(`User disuspend ${hours} jam.`);
+  }catch(err){toast(err.message.replace("Firebase: ",""));}
+};
+window.authorOrAdminUnsuspendUser=async uid=>{
+  try{
+    const target=await getDoc(doc(db,"users",uid)); if(!target.exists())throw new Error("User tidak ditemukan.");
+    const targetAuthorSnap=await getDoc(doc(db,"authors",uid));
+    if(targetAuthorSnap.exists()&&targetAuthorSnap.data().enabled===true)throw new Error("Author tidak dapat diubah statusnya.");
+    if(!isAuthor() && target.data().isAdmin===true)throw new Error("Admin tidak dapat mengubah Admin lain. Hanya Author.");
+    await updateDoc(doc(db,"users",uid),{suspendedUntil:null}); toast("Suspend user dicabut.");
+  }catch(err){toast(err.message.replace("Firebase: ",""));}
+};
+window.authorToggleAdmin=async(uid,grant)=>{
+  if(!isAuthor())return toast("Hanya Author yang dapat mengatur Admin.");
+  try{
+    const target=await getDoc(doc(db,"users",uid)); if(!target.exists())throw new Error("User tidak ditemukan.");
+    if(target.data().isAuthor===true)throw new Error("Author tidak dapat diturunkan menjadi Admin.");
+    await setDoc(doc(db,"admins",uid),{uid,username:target.data().username,enabled:grant,updatedAt:serverTimestamp()},{merge:true});
+    await updateDoc(doc(db,"users",uid),{isAdmin:grant});
+    toast(grant?"Admin diberikan.":"Admin dicabut.");
+  }catch(err){toast(err.message.replace("Firebase: ",""));}
+};
+
 $("refreshForumsBtn")?.addEventListener("click",loadAdminForums);
 $("refreshSupportBtn")?.addEventListener("click",loadSupportRequests);
 
 let promoTimer=null;
-function schedulePromo(){clearInterval(promoTimer);promoTimer=setInterval(()=>{if(profile&&!($("promo").classList.contains("hidden")))return;if(profile&&!profile.isAdmin){$("promo").classList.remove("hidden");setTimeout(()=>$("promo").classList.add("hidden"),5000)}},600000)}
+function schedulePromo(){clearInterval(promoTimer);promoTimer=setInterval(()=>{if(profile&&!($("promo").classList.contains("hidden")))return;if(profile&&!profile.isAdmin&&!profile.isAuthor){$("promo").classList.remove("hidden");setTimeout(()=>$("promo").classList.add("hidden"),5000)}},600000)}
 $("promoClose").onclick=()=>$("promo").classList.add("hidden");
 $("promoWeekly").onclick=()=>showPage("contact");
 $("promoMonthly").onclick=()=>showPage("contact");

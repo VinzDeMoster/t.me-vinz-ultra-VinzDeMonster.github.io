@@ -37,7 +37,7 @@
       <div class="brand"><span class="brand-dot"></span> Secret Forum</div>
       <div class="profile-mini">
         <div class="avatar" id="avatar">?</div>
-        <div><strong id="sidebarName">User</strong><span id="sidebarPremium" class="badge hidden">PREMIUM</span><small id="sidebarUsername">@user</small></div>
+        <div><strong id="sidebarName">User</strong><span id="sidebarPremium" class="badge hidden">PREMIUM</span><span id="sidebarRole" class="badge hidden"></span><small id="sidebarUsername">@user</small></div>
       </div>
       <nav>
         <button class="nav active" data-page="home">⌂ <span>Beranda</span></button>
@@ -156,8 +156,9 @@
         <div class="admin-grid">
           <div class="form-card glass"><h3>Kelola user</h3><form id="userSearchForm"><input id="userSearch" placeholder="Cari username"><button class="secondary wide">Cari</button></form><div id="userResults"></div></div>
           <div class="form-card glass"><h3>Moderasi forum</h3><form id="forumModerationForm"><input id="moderationCode" placeholder="Secret code forum"><select id="forumModerationMode"><option value="ban">Ban forum</option><option value="unban">Unban forum</option><option value="suspend">Suspend forum</option><option value="unsuspend">Unsuspend forum</option></select><input id="forumSuspendHours" type="number" min="1" value="24" placeholder="Jam suspend"><button class="secondary wide">Terapkan</button></form><p class="tiny muted">Ban/suspend forum memblokir akses anggota. Admin tetap dapat mengaksesnya.</p></div>
-          <div class="form-card glass"><h3>Berikan / cabut Premium</h3><form id="premiumForm"><input id="premiumUsername" placeholder="Username"><div class="two"><select id="premiumMode"><option value="grant">Berikan Premium</option><option value="revoke">Jadikan Biasa</option></select><input id="premiumDays" type="number" min="1" value="7" placeholder="Hari"></div><button class="primary wide">Terapkan</button></form></div>
-          <div class="form-card glass"><h3>Admin access</h3><form id="adminForm"><input id="adminUsername" placeholder="Username"><div class="two"><select id="adminMode"><option value="grant">Jadikan Admin</option><option value="revoke">Cabut Admin</option></select><button class="secondary">Terapkan</button></div></form><p class="tiny muted">Perubahan admin tersimpan di Firestore. Jangan ubah rules untuk membuat celah privilege.</p></div>
+          <div class="form-card glass"><h3>Berikan / cabut Premium</h3><form id="premiumForm"><input id="premiumUsername" placeholder="Username"><div class="two"><select id="premiumMode"><option value="grant">Berikan Premium</option><option value="revoke">Jadikan Biasa</option></select><input id="premiumDays" type="number" min="1" value="7" placeholder="Hari"></div><button class="primary wide">Terapkan</button></form><p class="tiny muted">Admin/Author dapat mengelola Premium tanpa batas fitur.</p></div>
+        
+          <div id="authorControls" class="form-card glass hidden"><span class="eyebrow">AUTHOR ONLY</span><h3>Otoritas Author</h3><p class="muted">Hanya pembuat website. Otoritas tertinggi.</p><div class="author-note">Author dapat mengelola Admin, ban permanen user/Premium/Admin, suspend, unban, unsuspend, dan menghapus forum. Pengaturan role Admin tersedia melalui Kelola user dan hanya tampil untuk Author.</div></div>
         </div>
       </section>
 
@@ -173,15 +174,6 @@
         </div>
         <div id="messages" class="messages glass"></div>
         <form id="messageForm" class="composer glass"><textarea id="messageInput" maxlength="1000" rows="1" placeholder="Tulis pesan teks..." autocomplete="off"></textarea><button class="primary">Kirim</button></form>
-        <div id="translatorPanel" class="translator-panel glass">
-          <div><span class="eyebrow">PREMIUM TOOL</span><h3>Terjemahkan sandi rahasia</h3><p class="tiny muted">Morse, angka, rumus, dan sandi modern/digital.</p></div>
-          <div id="translatorLocked" class="notice hidden">Fitur ini khusus Premium. Admin tetap dapat menggunakannya.</div>
-          <div id="translatorBody">
-            <textarea id="translatorInput" rows="3" placeholder="Masukkan sandi yang ingin diterjemahkan..."></textarea>
-            <div class="translator-actions"><select id="translatorType"><option value="auto">Deteksi otomatis</option><option value="morse">Morse</option><option value="number">Angka</option><option value="formula">Rumus</option><option value="digital">Modern / Digital</option></select><button id="translateBtn" class="primary" type="button">Terjemahkan</button></div>
-            <div id="translatorResult" class="translator-result hidden"></div>
-          </div>
-        </div>
       </section>
     </main>
   </div>
