@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updatePassword } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, collection, query, where, orderBy, onSnapshot, getDocs, serverTimestamp, runTransaction, limit, deleteDoc, writeBatch } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, collection, collectionGroup, query, where, orderBy, onSnapshot, getDocs, serverTimestamp, runTransaction, limit, deleteDoc, writeBatch } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
 
 /*
   1) Buat Firebase project.
@@ -78,7 +78,7 @@ function showPage(name){
   document.querySelectorAll(".nav").forEach(x=>x.classList.toggle("active",x.dataset.page===name));
   const titles={home:["Beranda","Kelola forum rahasiamu."],join:["Bergabung Forum","Masukkan secret code untuk bergabung."],create:["Buat Forum","Buat ruang privat baru."],settings:["Pengaturan","Kelola akun dan keamanan."],inbox:["Inbox","Informasi dan pesan penting akun."],contact:["Premium","Pilih paket Premium."],payment:["Pembayaran Premium","Selesaikan pembayaran Premium."],admin:["Admin Panel","Kelola user, premium, dan akses admin."],forum:["Forum","Obrolan teks privat."]};
   $("pageTitle").textContent=titles[name]?.[0]||"Secret Forum"; $("pageSubtitle").textContent=titles[name]?.[1]||"";
-  if(name==="admin" && canAdmin()){ loadAdminForums(); loadSupportRequests(); }
+  if(name==="admin" && canAdmin()){ loadAdminForums(); loadSupportRequests(); if(isAuthor()) loadAuthorActivity(); }
   if(name==="inbox" && currentUser) loadInbox();
   if(name==="settings" && currentUser) loadActivationStatus();
   if(name==="create") updateMemberLimitUI();
@@ -92,6 +92,7 @@ function setLoggedInUI(){
   const premiumActive=isPremiumActive(profile.premiumUntil);
   $("sidebarPremium").classList.toggle("hidden",!premiumActive);
   $("adminNav").classList.toggle("hidden",!canAdmin()); $("adminSettingsCard").classList.toggle("hidden",!canAdmin()); $("authorControls")?.classList.toggle("hidden",!isAuthor());
+  $("authorActivityCard")?.classList.toggle("hidden",!isAuthor());
   const status=profile.isAuthor?"AUTHOR":(profile.isAdmin?"ADMIN":(premiumActive?"PREMIUM":"BIASA"));
   const detail=profile.isAuthor?"Author • pemilik website • otoritas tertinggi.":(profile.isAdmin?"Akun memiliki akses administrasi.":(premiumActive?"Premium aktif sampai "+new Date(premiumUntilMillis(profile.premiumUntil)).toLocaleString("id-ID"):"Akun biasa tanpa Premium."));
   $("accountStatus").textContent=status; $("accountStatusDetail").textContent=detail;
@@ -225,6 +226,11 @@ $("createForm").onsubmit=async e=>{
       tx.set(doc(db,"forums",forumRef.id,"members",currentUser.uid),{displayName:profile.displayName,username:profile.username,role:"owner",joinedAt:serverTimestamp()});
     });
     $("createForm").reset();
+    const secretInput=$("secretCode");
+    if(secretInput){
+      secretInput.value=secret;
+      secretInput.disabled=!premium && !unlimited;
+    }
     const createdBox=$("createdCodeNotice");
     if(createdBox){
       createdBox.classList.remove("hidden");
@@ -292,7 +298,7 @@ function openForum(id,data){
   };
   const composerLocked=data.ownerOnly===true && !isOwner && !canAdmin();
   setComposerState(composerLocked);
-  $("copyCodeBtn").onclick=()=>navigator.clipboard.writeText(data.secretCode).then(()=>toast("Kode disalin."));
+  $("copyCodeBtn").onclick=async()=>{const ok=await copyText(data.secretCode||"");toast(ok?"Kode disalin.":"Gagal menyalin kode.");};
   $("leaveForumBtn").onclick=async()=>{
     if(canAdmin())return;
     if(!confirm(isOwner?"Keluar dari forum? Kamu tetap tercatat sebagai owner dan dapat mengakses/mengelola forum lagi nanti.":"Keluar dari forum ini?"))return;
@@ -550,15 +556,91 @@ window.authorToggleAdmin=async(uid,grant)=>{
   if(!isAuthor())return toast("Hanya Author yang dapat mengatur Admin.");
   try{
     const target=await getDoc(doc(db,"users",uid)); if(!target.exists())throw new Error("User tidak ditemukan.");
-    if(target.data().isAuthor===true)throw new Error("Author tidak dapat diturunkan menjadi Admin.");
+    const targetAuthorSnap=await getDoc(doc(db,"authors",uid)); if(targetAuthorSnap.exists()&&targetAuthorSnap.data().enabled===true)throw new Error("Author tidak dapat diturunkan menjadi Admin.");
     await setDoc(doc(db,"admins",uid),{uid,username:target.data().username,enabled:grant,updatedAt:serverTimestamp()},{merge:true});
     await updateDoc(doc(db,"users",uid),{isAdmin:grant});
     toast(grant?"Admin diberikan.":"Admin dicabut.");
   }catch(err){toast(err.message.replace("Firebase: ",""));}
 };
 
+
+async function loadAuthorActivity(){
+  if(!isAuthor())return;
+  try{
+    const [usersSnap,forumsSnap,adminsSnap,authorsSnap,messagesSnap]=await Promise.all([
+      getDocs(collection(db,"users")),
+      getDocs(collection(db,"forums")),
+      getDocs(collection(db,"admins")),
+      getDocs(collection(db,"authors")),
+      getDocs(collectionGroup(db,"messages"))
+    ]);
+    const users=usersSnap.docs.map(d=>d.data());
+    const forums=forumsSnap.docs.map(d=>d.data());
+    const admins=adminsSnap.docs.filter(d=>d.data().enabled!==false).length;
+    const authors=authorsSnap.docs.filter(d=>d.data().enabled===true).length;
+    const banned=users.filter(u=>u.banned===true).length;
+    const suspended=users.filter(u=>premiumUntilMillis(u.suspendedUntil)>Date.now()).length;
+    const premium=users.filter(u=>isPremiumActive(u.premiumUntil)).length;
+    const memberTotal=forums.reduce((n,f)=>n+(Array.isArray(f.memberIds)?f.memberIds.length:0),0);
+    const createdForums=forums.length;
+    const totalMessages=messagesSnap.size;
+    $("authorActivityResults").innerHTML=`
+      <div class="activity-grid">
+        <div class="activity-stat"><span>Total akun</span><b>${users.length}</b></div>
+        <div class="activity-stat"><span>Total forum</span><b>${createdForums}</b></div>
+        <div class="activity-stat"><span>Total pesan</span><b>${totalMessages}</b></div>
+        <div class="activity-stat"><span>Total keanggotaan</span><b>${memberTotal}</b></div>
+        <div class="activity-stat"><span>Premium aktif</span><b>${premium}</b></div>
+        <div class="activity-stat"><span>Admin aktif</span><b>${admins}</b></div>
+        <div class="activity-stat"><span>Author aktif</span><b>${authors}</b></div>
+        <div class="activity-stat"><span>Ban permanen</span><b>${banned}</b></div>
+        <div class="activity-stat"><span>Suspend aktif</span><b>${suspended}</b></div>
+      </div>
+      <p class="tiny muted" style="margin-top:10px">Data dihitung dari seluruh koleksi yang dapat diakses Author.</p>`;
+  }catch(err){
+    console.error("loadAuthorActivity:",err);
+    $("authorActivityResults").innerHTML=`<div class="notice">Gagal memuat aktivitas: ${esc(err.message.replace("Firebase: ",""))}</div>`;
+  }
+}
+async function authorDeleteForum(secret){
+  if(!isAuthor())return toast("Hanya Author yang dapat menghapus forum.");
+  if(!secret)return toast("Secret code forum tidak ditemukan.");
+  if(!confirm("Hapus forum ini secara permanen beserta anggota, pesan, dan secret code?"))return;
+  try{
+    const codeRef=doc(db,"forumCodes",secret);
+    const codeSnap=await getDoc(codeRef);
+    if(!codeSnap.exists())throw new Error("Secret code tidak ditemukan.");
+    const forumId=codeSnap.data().forumId;
+    const forumRef=doc(db,"forums",forumId);
+    const forumSnap=await getDoc(forumRef);
+    if(!forumSnap.exists())throw new Error("Forum tidak ditemukan.");
+
+    const refs=[];
+    const [membersSnap,messagesSnap]=await Promise.all([
+      getDocs(collection(db,"forums",forumId,"members")),
+      getDocs(collection(db,"forums",forumId,"messages"))
+    ]);
+    membersSnap.docs.forEach(d=>refs.push(d.ref));
+    messagesSnap.docs.forEach(d=>refs.push(d.ref));
+    refs.push(forumRef,codeRef);
+
+    for(let i=0;i<refs.length;i+=450){
+      const batch=writeBatch(db);
+      refs.slice(i,i+450).forEach(ref=>batch.delete(ref));
+      await batch.commit();
+    }
+    toast("Forum berhasil dihapus permanen.");
+    loadAdminForums();
+    loadAuthorActivity();
+    loadForums();
+  }catch(err){
+    toast(err.message.replace("Firebase: ",""));
+  }
+}
+
 $("refreshForumsBtn")?.addEventListener("click",loadAdminForums);
 $("refreshSupportBtn")?.addEventListener("click",loadSupportRequests);
+$("refreshAuthorActivityBtn")?.addEventListener("click",loadAuthorActivity);
 
 let promoTimer=null;
 function schedulePromo(){clearInterval(promoTimer);promoTimer=setInterval(()=>{if(profile&&!($("promo").classList.contains("hidden")))return;if(profile&&!profile.isAdmin&&!profile.isAuthor){$("promo").classList.remove("hidden");setTimeout(()=>$("promo").classList.add("hidden"),5000)}},600000)}

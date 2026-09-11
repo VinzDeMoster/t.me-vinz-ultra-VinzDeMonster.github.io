@@ -158,7 +158,15 @@
           <div class="form-card glass"><h3>Moderasi forum</h3><form id="forumModerationForm"><input id="moderationCode" placeholder="Secret code forum"><select id="forumModerationMode"><option value="ban">Ban forum</option><option value="unban">Unban forum</option><option value="suspend">Suspend forum</option><option value="unsuspend">Unsuspend forum</option></select><input id="forumSuspendHours" type="number" min="1" value="24" placeholder="Jam suspend"><button class="secondary wide">Terapkan</button></form><p class="tiny muted">Ban/suspend forum memblokir akses anggota. Admin tetap dapat mengaksesnya.</p></div>
           <div class="form-card glass"><h3>Berikan / cabut Premium</h3><form id="premiumForm"><input id="premiumUsername" placeholder="Username"><div class="two"><select id="premiumMode"><option value="grant">Berikan Premium</option><option value="revoke">Jadikan Biasa</option></select><input id="premiumDays" type="number" min="1" value="7" placeholder="Hari"></div><button class="primary wide">Terapkan</button></form><p class="tiny muted">Admin/Author dapat mengelola Premium tanpa batas fitur.</p></div>
         
-          <div id="authorControls" class="form-card glass hidden"><span class="eyebrow">AUTHOR ONLY</span><h3>Otoritas Author</h3><p class="muted">Hanya pembuat website. Otoritas tertinggi.</p><div class="author-note">Author dapat mengelola Admin, ban permanen user/Premium/Admin, suspend, unban, unsuspend, dan menghapus forum. Pengaturan role Admin tersedia melalui Kelola user dan hanya tampil untuk Author.</div></div>
+          <div id="authorControls" class="form-card glass hidden">
+            <span class="eyebrow">AUTHOR ONLY</span><h3>Otoritas Author</h3>
+            <p class="muted">Pembuat website • otoritas tertinggi.</p>
+            <div class="author-note">Author dapat mengelola semua role kecuali dirinya sendiri, mengangkat/mencopot Admin, ban permanen, suspend, unban, unsuspend, dan menghapus forum secara permanen.</div>
+          </div>
+          <div id="authorActivityCard" class="form-card glass hidden">
+            <div class="section-head"><div><span class="eyebrow">AUTHOR ONLY</span><h3>Aktivitas Keseluruhan</h3><p class="muted">Ringkasan aktivitas seluruh website.</p></div><button class="secondary" id="refreshAuthorActivityBtn" type="button">Refresh</button></div>
+            <div id="authorActivityResults" class="notice">Belum dimuat.</div>
+          </div>
         </div>
       </section>
 
