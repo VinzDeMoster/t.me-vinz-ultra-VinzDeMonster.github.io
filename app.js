@@ -31,6 +31,7 @@ const canAdmin = () => isAuthor() || !!profile?.isAdmin;
 const roleBadgeHTML = role => role === "author" ? '<span class="role-badge author">AUTHOR</span>' : role === "admin" ? '<span class="role-badge admin">ADMIN</span>' : '';
 
 const toast = (msg,duration=2500) => { $("toast").textContent = msg; $("toast").classList.add("show"); setTimeout(()=>$("toast").classList.remove("show"),duration); };
+const copyText = async (text) => { try { if(navigator.clipboard?.writeText) { await navigator.clipboard.writeText(String(text)); return true; } } catch(e) {} try { const ta=document.createElement("textarea"); ta.value=String(text); ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta); ta.select(); const ok=document.execCommand("copy"); ta.remove(); return ok; } catch(e) { return false; } };
 const esc = s => String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));
 const premiumUntilMillis = value => {
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -202,7 +203,7 @@ $("activationForm").onsubmit=async e=>{
   }catch(err){toast(err.message.replace("Firebase: ",""));}
 };
 $("profileForm").onsubmit=async e=>{e.preventDefault(); const name=$("settingsDisplayName").value.trim(); if(!name)return; await updateDoc(doc(db,"users",currentUser.uid),{displayName:name}); profile.displayName=name; setLoggedInUI(); toast("Nama berhasil diubah.");};
-$("passwordForm").onsubmit=async e=>{e.preventDefault(); try{await updatePassword(currentUser,$("newPassword").value); $("newPassword").value=""; toast("Password berhasil diubah.");}catch(err){toast("Demi keamanan, login ulang sebelum mengganti password.");}};
+$("passwordForm").onsubmit=async e=>{e.preventDefault(); const value=$("newPassword").value; if(!value)return toast("Masukkan password baru."); if(value.length<6)return toast("Password minimal 6 karakter."); try{await updatePassword(currentUser,value); $("newPassword").value=""; toast("Password berhasil diubah.");}catch(err){toast(err.code==="auth/requires-recent-login"?"Demi keamanan, login ulang sebelum mengganti password.":err.message.replace("Firebase: ",""));}};
 $("createForm").onsubmit=async e=>{
   e.preventDefault();
   try{
@@ -228,7 +229,7 @@ $("createForm").onsubmit=async e=>{
     if(createdBox){
       createdBox.classList.remove("hidden");
       createdBox.innerHTML=`<b>Forum berhasil dibuat.</b><br><span class="tiny muted">Secret code forum:</span><div class="created-code-row"><code>${esc(secret)}</code><button type="button" class="secondary" id="copyCreatedCode">Salin</button></div><span class="tiny muted">Kode ini wajib disimpan untuk bergabung ke forum.</span>`;
-      $("copyCreatedCode").onclick=()=>navigator.clipboard.writeText(secret).then(()=>toast("Secret code disalin."));
+      $("copyCreatedCode").onclick=async()=>{ const ok=await copyText(secret); toast(ok?"Secret code disalin.":"Gagal menyalin. Silakan salin manual."); };
     }
     toast("Forum berhasil dibuat. Secret code sudah ditampilkan di bawah form.",5000); loadForums();
   }catch(err){ toast(err.message.replace("Firebase: ","")); }
@@ -567,5 +568,6 @@ $("promoMonthly").onclick=()=>showPage("contact");
 
 onAuthStateChanged(auth,async user=>{
   currentUser=user;
+  if(!user){ profile=null; activeForum=null; if(unsubscribeMessages)unsubscribeMessages(); if(unsubscribeProfile)unsubscribeProfile(); if(unsubscribeActivations)unsubscribeActivations(); if(unsubscribeInbox)unsubscribeInbox(); unsubscribeMessages=unsubscribeProfile=unsubscribeActivations=unsubscribeInbox=null; if(promoTimer){clearInterval(promoTimer); promoTimer=null;} $("promo")?.classList.add("hidden"); }
   if(user){try{await loadProfile(user);schedulePromo()}catch(e){toast(e.message)}}else{$("appView").classList.add("hidden");$("authView").classList.remove("hidden");}
 });
