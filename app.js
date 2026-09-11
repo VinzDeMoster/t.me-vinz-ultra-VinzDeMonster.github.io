@@ -44,17 +44,25 @@ const premiumBadgeLevel = count => {
   return "";
 };
 const premiumBadgeHTML = level => level ? `<span class="premium-verified ${level}" title="Premium ${level === "red" ? "Lv. 1" : level === "purple" ? "Lv. 2" : level === "pink" ? "Lv. 3" : "Lv. 4+"}" aria-label="Badge Premium"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.2 16.7 4.8 12.3l-1.9 1.9 6.3 6.3L21.2 8.5l-1.9-1.9z"/></svg></span>` : "";
-const randomChars = (length, alphabet="ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789") => { const bytes=crypto.getRandomValues(new Uint8Array(length)); return Array.from(bytes, x=>alphabet[x%alphabet.length]).join(""); };
+const RANDOM_ALPHABET="ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+const randomChars = length => { const bytes=crypto.getRandomValues(new Uint8Array(length)); return Array.from(bytes, x=>RANDOM_ALPHABET[x % RANDOM_ALPHABET.length]).join(""); };
 const randomCode = () => randomChars(18);
-const emailForUsername = u => `${u.trim().toLowerCase().replace(/[^a-z0-9._-]/g,"_")}@secretforum.local`;
 const activationCode = () => randomChars(20);
+const emailForUsername = u => `${u.trim().toLowerCase().replace(/[^a-z0-9._-]/g,"_")}@secretforum.local`;
 
 function updateMemberLimitUI(){
-  const input=$("memberLimit"), note=$("memberLimitNote"), premium=isPremiumActive(profile?.premiumUntil);
+  const input=$("memberLimit"), note=$("memberLimitNote"), code=$("secretCode"), hint=$("premiumHint"), customNote=$("customCodeNote"), premium=isPremiumActive(profile?.premiumUntil);
   if(!input)return;
   input.max=premium?400:20;
   if(Number(input.value)>Number(input.max)) input.value=input.max;
   if(note) note.textContent=premium ? "Premium: kamu bisa mengatur batas 2–400 anggota." : "Akun biasa: batas maksimal 20 anggota.";
+  if(code){
+    code.disabled=!premium;
+    code.value=premium?code.value:"";
+    code.placeholder=premium?"Opsional: buat secret code sendiri":"Otomatis dibuat 18 karakter oleh sistem";
+  }
+  if(hint){hint.textContent=premium?"CUSTOM":"AUTO";hint.classList.toggle("hidden",false);}
+  if(customNote) customNote.textContent=premium ? "Premium dapat menentukan secret code sendiri. Akun biasa mendapatkan kode acak 18 karakter." : "Kode akun biasa dibuat otomatis 18 karakter dan tidak dapat diubah.";
 }
 function showPage(name){
   document.querySelectorAll(".page").forEach(x=>x.classList.add("hidden"));
@@ -195,6 +203,7 @@ $("createForm").onsubmit=async e=>{
     if(max<2||max>maxAllowed)return toast(premium?"Jumlah anggota Premium harus 2–400.":"Akun biasa hanya dapat membuat forum sampai 20 anggota.");
     if(custom&&!premium)return toast("Custom code hanya untuk Premium.");
     const secret=custom||randomCode();
+    if(!custom && secret.length!==18)throw new Error("Gagal membuat secret code 18 karakter.");
     const forumRef=doc(collection(db,"forums"));
     const codeRef=doc(db,"forumCodes",secret);
     await runTransaction(db,async tx=>{
@@ -204,7 +213,14 @@ $("createForm").onsubmit=async e=>{
       tx.set(codeRef,{forumId:forumRef.id});
       tx.set(doc(db,"forums",forumRef.id,"members",currentUser.uid),{displayName:profile.displayName,username:profile.username,role:"owner",joinedAt:serverTimestamp()});
     });
-    $("createForm").reset(); toast("Forum dibuat. Kode: "+secret,8000); loadForums();
+    $("createForm").reset();
+    const createdBox=$("createdCodeNotice");
+    if(createdBox){
+      createdBox.classList.remove("hidden");
+      createdBox.innerHTML=`<b>Forum berhasil dibuat.</b><br><span class="tiny muted">Secret code (18 karakter):</span><div class="created-code-row"><code>${esc(secret)}</code><button type="button" class="secondary" id="copyCreatedCode">Salin</button></div>`;
+      $("copyCreatedCode").onclick=()=>navigator.clipboard.writeText(secret).then(()=>toast("Secret code disalin."));
+    }
+    toast("Forum berhasil dibuat. Secret code sudah ditampilkan di bawah form.",5000); loadForums();
   }catch(err){ toast(err.message.replace("Firebase: ","")); }
 };
 $("joinForm").onsubmit=async e=>{
@@ -316,7 +332,7 @@ function openForum(id,data){
       const premiumBadge=premiumBadgeHTML(premiumBadgeLevel(m.premiumPurchases));
       const deleteButton=canDelete?`<button class="msg-delete" data-delete-message="${d.id}" title="Hapus pesan" aria-label="Hapus pesan">🗑</button>`:"";
       const translateButton=canUsePremium()?`<button class="msg-translate" data-translate-message="${d.id}">✦ Terjemahkan</button>`:"";
-      return `<div class="msg ${me?"me":""}"><div class="msg-head"><div class="msg-name">${esc(m.displayName||"User")} ${verified} ${premiumBadge}</div>${deleteButton}</div><div class="msg-text">${esc(m.text).replace(/\n/g,"<br>")}</div><div class="msg-tools">${translateButton}</div><div class="msg-time">${m.createdAt?.toDate?.().toLocaleString("id-ID")||"baru saja"}</div></div>`;
+      return `<div class="msg ${me?"me":""}" data-original-text="${esc(m.text)}"><div class="msg-head"><div class="msg-name">${esc(m.displayName||"User")} ${verified} ${premiumBadge}</div>${deleteButton}</div><div class="msg-text">${esc(m.text).replace(/\n/g,"<br>")}</div><div class="msg-tools">${translateButton}</div><div class="msg-time">${m.createdAt?.toDate?.().toLocaleString("id-ID")||"baru saja"}</div></div>`;
     }).join("");
     box.querySelectorAll("[data-delete-message]").forEach(btn=>btn.onclick=async()=>{
       if(!activeForum)return;
@@ -332,9 +348,8 @@ function openForum(id,data){
         btn.dataset.translated="false"; btn.textContent="✦ Terjemahkan sandi";
         return;
       }
-      const snap=await getDoc(doc(db,"forums",activeForum.id,"messages",btn.dataset.translateMessage));
-      if(!snap.exists())return toast("Pesan tidak ditemukan.");
-      const original=snap.data().text||"";
+      const original=btn.closest(".msg")?.dataset.originalText || "";
+      if(!original)return toast("Pesan tidak ditemukan.");
       const result=decodeSecret(original,"auto");
       if(result.startsWith("Sandi belum dikenali"))return toast("Sandi belum dikenali. Pilih jenis sandi manual di alat Premium.");
       btn.dataset.original=original; btn.dataset.translated="true";
@@ -347,33 +362,74 @@ function openForum(id,data){
     toast("Gagal memuat chat: "+err.message.replace("Firebase: ",""));
   });
 }
-const MORSE={".-":"A","-...":"B","-.-.":"C","-..":"D",".":"E","..-.":"F","--.":"G","....":"H","..":"I",".---":"J","-.-":"K",".-..":"L","--":"M","-.":"N","---":"O",".--.":"P","--.-":"Q",".-.":"R","...":"S","-":"T","..-":"U","...-":"V",".--":"W","-..-":"X","-.--":"Y","--..":"Z","-----":"0",".----":"1","..---":"2","...--":"3","....-":"4",".....":"5","-....":"6","--...":"7","---..":"8","----.":"9",".-.-.-":".","--..--":",","..--..":"?","-.-.--":"!","-....-":"-",".-..-.":"'","-.--.":"(","-.--.-":")","/":" "};
-function decodeMorse(v){return v.trim().split(/\s{2,}|\/+/).map(word=>word.trim().split(/\s+/).filter(Boolean).map(x=>MORSE[x]||`[${x}]`).join("")).join(" ");}
+const MORSE={".-":"A","-...":"B","-.-.":"C","-..":"D",".":"E","..-.":"F","--.":"G","....":"H","..":"I",".---":"J","-.-":"K",".-..":"L","--":"M","-.":"N","---":"O",".--.":"P","--.-":"Q",".-.":"R","...":"S","-":"T","..-":"U","...-":"V",".--":"W","-..-":"X","-.--":"Y","--..":"Z","-----":"0",".----":"1","..---":"2","...--":"3","....-":"4",".....":"5","-....":"6","--...":"7","---..":"8","----.":"9",".-.-.-":".","--..--":",","..--..":"?","-.-.--":"!","-....-":"-",".-..-.":"'","-.--.":"(","-.--.-":")"};
+function decodeMorse(v){
+  const x=v.trim();
+  const words=x.split(/\s*\/\s*|\s{2,}/).filter(Boolean);
+  return words.map(word=>word.trim().split(/\s+/).filter(Boolean).map(x=>MORSE[x]||`[${x}]`).join("")).join(" ");
+}
 function decodeNumbers(v){
   const x=v.trim();
-  if(/^(?:\d{1,3}[ ,;:.]?)+$/.test(x)){
-    const nums=x.split(/[^0-9]+/).filter(Boolean).map(Number);
-    if(nums.length&&nums.every(n=>n>=1&&n<=26))return nums.map(n=>String.fromCharCode(64+n)).join("");
-    if(nums.length&&nums.every(n=>n>=32&&n<=126))return nums.map(n=>String.fromCharCode(n)).join("");
-  }
-  if(/^(?:[01]{8}\s*)+$/.test(x))return x.match(/[01]{8}/g).map(b=>String.fromCharCode(parseInt(b,2))).join("");
-  return "Tidak dikenali sebagai sandi angka A1Z26/ASCII/biner.";
+  const nums=x.split(/[^0-9]+/).filter(Boolean).map(Number);
+  if(!nums.length)return "";
+  if(nums.every(n=>n>=1&&n<=26))return nums.map(n=>String.fromCharCode(64+n)).join("");
+  if(nums.every(n=>n>=32&&n<=126))return nums.map(n=>String.fromCharCode(n)).join("");
+  return "Tidak dikenali sebagai sandi angka A1Z26/ASCII.";
+}
+function decodeBinary(v){
+  const bits=v.trim().replace(/\s+/g," ");
+  if(!/^(?:[01]{8})(?:\s+[01]{8})*$/.test(bits))return null;
+  return bits.split(/\s+/).map(b=>String.fromCharCode(parseInt(b,2))).join("");
+}
+function decodeHex(v){
+  const x=v.trim().replace(/0x/gi,"").replace(/[,:-]+/g," ");
+  if(!/^(?:[0-9a-fA-F]{2})(?:\s+[0-9a-fA-F]{2})*$/.test(x))return null;
+  return x.split(/\s+/).map(h=>String.fromCharCode(parseInt(h,16))).join("");
 }
 function decodeDigital(v){
   const x=v.trim();
-  if(/^(?:[01]{8}\s*)+$/.test(x))return x.match(/[01]{8}/g).map(b=>String.fromCharCode(parseInt(b,2))).join("");
-  if(/^(?:0x)?[0-9a-fA-F]{2}(?:[\s,:-]+(?:0x)?[0-9a-fA-F]{2})*$/.test(x)){const parts=x.replace(/0x/gi,"").split(/[\s,:-]+/).filter(Boolean);return parts.map(h=>String.fromCharCode(parseInt(h,16))).join("");}
-  try{const normalized=x.replace(/-/g,"+").replace(/_/g,"/"); if(/^[A-Za-z0-9+/=\s]+$/.test(normalized)&&normalized.replace(/\s/g,"").length>=4){const out=atob(normalized.replace(/\s/g,"")); if([...out].every(c=>c.charCodeAt(0)>=9))return out;}}catch(e){}
-  try{if(/^https?%3A|%[0-9A-F]{2}/i.test(x)||/%[0-9A-F]{2}/i.test(x))return decodeURIComponent(x);}catch(e){}
-  return "Tidak dikenali sebagai Base64, hex, biner, atau URL encoding.";
+  const bin=decodeBinary(x); if(bin!==null)return bin;
+  const hex=decodeHex(x); if(hex!==null)return hex;
+  try{const normalized=x.replace(/-/g,"+").replace(/_/g,"/").replace(/\s/g,"");if(/^[A-Za-z0-9+/]+={0,2}$/.test(normalized)&&normalized.length>=4&&normalized.length%4===0){const out=atob(normalized);if(out) return [...out].map(c=>c.charCodeAt(0)<32?`\\x${c.charCodeAt(0).toString(16).padStart(2,"0")}`:c).join("");}}catch(e){}
+  try{if(/(?:%[0-9A-F]{2})+/i.test(x))return decodeURIComponent(x);}catch(e){}
+  // ROT13 is a common modern/digital text encoding.
+  if(/^[A-Za-z0-9\s.,!?'-]+$/.test(x) && /[A-Za-z]/.test(x))return x.replace(/[A-Za-z]/g,c=>{const b=c<="Z"?65:97;return String.fromCharCode((c.charCodeAt(0)-b+13)%26+b);});
+  return "Tidak dikenali sebagai sandi digital (biner, hex, Base64, URL, atau ROT13).";
 }
 function decodeFormula(v){
   const x=v.trim();
-  if(!/^[0-9+\-*/().%\s]+$/.test(x)||!/[+\-*/%]/.test(x))return "Rumus hanya mendukung angka dan operator + − × ÷ % ( ).";
-  try{const tokens=x.match(/\d+(?:\.\d+)?|[+\-*/%.()]/g)||[]; let pos=0; function expr(){let n=term();while(tokens[pos]==="+"||tokens[pos]==="-"){const op=tokens[pos++],r=term();n=op==="+"?n+r:n-r;}return n} function term(){let n=factor();while(tokens[pos]==="*"||tokens[pos]==="/"||tokens[pos]==="%"){const op=tokens[pos++],r=factor();n=op==="*"?n*r:op==="/"?n/r:n%r;}return n} function factor(){if(tokens[pos]==="("){pos++;const n=expr();if(tokens[pos]!==")")throw 0;pos++;return n} if(tokens[pos]==="-"){pos++;return -factor()} const n=Number(tokens[pos++]);if(!Number.isFinite(n))throw 0;return n} const n=expr();if(pos!==tokens.length||!Number.isFinite(n))throw 0;return `Hasil rumus: ${n}`;}catch(e){return "Rumus tidak valid.";}
+  if(!/^[0-9+\-*/().%\s×÷]+$/.test(x)||!/[+\-*/%×÷]/.test(x))return "Rumus hanya mendukung angka dan operator + − × ÷ %.";
+  const safe=x.replace(/×/g,"*").replace(/÷/g,"/");
+  try{const tokens=safe.match(/\d+(?:\.\d+)?|[+\-*/%.()]/g)||[];let pos=0;
+    function expr(){let n=term();while(tokens[pos]==="+"||tokens[pos]==="-"){const op=tokens[pos++],r=term();n=op==="+"?n+r:n-r;}return n;}
+    function term(){let n=factor();while(tokens[pos]==="*"||tokens[pos]==="/"||tokens[pos]==="%"){const op=tokens[pos++],r=factor();n=op==="*"?n*r:op==="/"?n/r:n%r;}return n;}
+    function factor(){if(tokens[pos]==="("){pos++;const n=expr();if(tokens[pos]!==")")throw 0;pos++;return n;}if(tokens[pos]==="-"){pos++;return -factor();}const n=Number(tokens[pos++]);if(!Number.isFinite(n))throw 0;return n;}
+    const n=expr();if(pos!==tokens.length||!Number.isFinite(n))throw 0;return `Hasil rumus: ${n}`;
+  }catch(e){return "Rumus tidak valid.";}
 }
-function decodeSecret(v,type){if(type==="morse")return decodeMorse(v);if(type==="number")return decodeNumbers(v);if(type==="formula")return decodeFormula(v);if(type==="digital")return decodeDigital(v);const x=v.trim();if(/[.\-]{1,5}(?:\s+|$)/.test(x)&&/[.\-]/.test(x))return decodeMorse(x);if(/^(?:[01]{8}\s*)+$/.test(x)||/^(?:0x)?[0-9a-fA-F]{2}(?:[\s,:-]+(?:0x)?[0-9a-fA-F]{2})*$/.test(x))return decodeDigital(x);if(/^[0-9\s,;:.+-]+$/.test(x)&&/[0-9]/.test(x)){const n=decodeNumbers(x);if(!n.startsWith("Tidak dikenali"))return n;if(/[+*/%()-]/.test(x))return decodeFormula(x);}return "Sandi belum dikenali. Pilih jenis sandi secara manual.";}
-function translateSecret(){if(!canUsePremium())return toast("Fitur terjemahan hanya untuk Premium.");const input=$("translatorInput").value.trim(),type=$("translatorType").value;if(!input)return toast("Masukkan sandi terlebih dahulu.");const result=decodeSecret(input,type);const box=$("translatorResult");box.textContent=result;box.classList.remove("hidden");}
+function looksLikeMorse(x){return /^[.\-\s/]+$/.test(x)&&/[.\-]/.test(x)&&x.replace(/[.\-\s/]/g,"")==="";}
+function looksLikeNumber(x){return /^\d+(?:[\s,;:.]+\d+)*$/.test(x);}
+function decodeSecret(v,type){
+  const x=v.trim();
+  if(type==="morse")return decodeMorse(x);
+  if(type==="number")return decodeNumbers(x);
+  if(type==="formula")return decodeFormula(x);
+  if(type==="digital")return decodeDigital(x);
+  if(looksLikeMorse(x))return decodeMorse(x);
+  const bin=decodeBinary(x); if(bin!==null)return bin;
+  const hex=decodeHex(x); if(hex!==null)return hex;
+  if(looksLikeNumber(x)){const n=decodeNumbers(x);if(!n.startsWith("Tidak dikenali"))return n;}
+  if(/[+*/%×÷]/.test(x))return decodeFormula(x);
+  if(/(?:%[0-9A-F]{2})+/i.test(x))return decodeDigital(x);
+  try{const normalized=x.replace(/-/g,"+").replace(/_/g,"/").replace(/\s/g,"");if(/^[A-Za-z0-9+/]+={0,2}$/.test(normalized)&&normalized.length>=4&&normalized.length%4===0){const out=atob(normalized);if(out && /[\x20-\x7E]/.test(out))return out;}}catch(e){}
+  return "Sandi belum dikenali. Pilih jenis sandi secara manual.";
+}
+function translateSecret(){
+  if(!canUsePremium())return toast("Fitur terjemahan hanya untuk Premium.");
+  const input=$("translatorInput").value.trim(),type=$("translatorType").value;
+  if(!input)return toast("Masukkan sandi terlebih dahulu.");
+  const result=decodeSecret(input,type);const box=$("translatorResult");box.textContent=result;box.classList.remove("hidden");
+}
 $("translateBtn")?.addEventListener("click",translateSecret);
 $("messageForm").onsubmit=async e=>{
   e.preventDefault();
@@ -429,10 +485,10 @@ async function loadSupportRequests(){
   if(!profile?.isAdmin)return;
   try{
     const s=await getDocs(query(collection(db,"supportRequests"),orderBy("createdAt","desc"),limit(30)));
-    $("supportResults").innerHTML=s.docs.map(d=>{const r=d.data(); const t=r.createdAt?.toDate?.().toLocaleString("id-ID")||"baru saja"; const ready=r.status==="ready"; const done=r.status==="done"; const action=ready?`<div><span class="tiny muted">Kode aktivasi: </span><b class="activation-code">${esc(r.activationCode||"-")}</b></div><div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button class="secondary" onclick="navigator.clipboard?.writeText('${esc(r.activationCode||"")}');toast('Kode disalin.')">Salin kode</button><button class="secondary" onclick="adminCloseSupport('${d.id}')">Tandai selesai</button></div>`:(done?`<span class="tiny muted">Selesai</span>`:`<button class="secondary" onclick="adminVerifyPremium('${d.id}')">Verifikasi & buat kode</button>`); return `<div class="notice" style="margin:8px 0"><b>@${esc(r.username||"user")}</b> — ${esc(r.displayName||"")}<br>Paket: <b>${esc(r.plan||"Premium")}</b> (${Number(r.days||0)} hari)<br><span class="tiny muted">${t} • ${esc(r.status||"open")}</span><div style="margin-top:8px">${action}</div></div>`}).join("")||`<div class="notice">Belum ada permintaan Premium.</div>`;
+    $("supportResults").innerHTML=s.docs.map(d=>{const r=d.data(); const t=r.createdAt?.toDate?.().toLocaleString("id-ID")||"baru saja"; const ready=r.status==="ready"; const done=r.status==="done"; const action=ready?`<div><span class="tiny muted">Kode aktivasi (20 karakter): </span><b class="activation-code">${esc(r.activationCode||"-")}</b></div><div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button class="secondary" onclick="navigator.clipboard?.writeText('${esc(r.activationCode||"")}');toast('Kode disalin.')">Salin kode</button><button class="secondary" onclick="adminCloseSupport('${d.id}')">Tandai selesai</button></div>`:(done?`<span class="tiny muted">Selesai</span>`:`<button class="secondary" onclick="adminVerifyPremium('${d.id}')">Verifikasi & buat kode</button>`); return `<div class="notice" style="margin:8px 0"><b>@${esc(r.username||"user")}</b> — ${esc(r.displayName||"")}<br>Paket: <b>${esc(r.plan||"Premium")}</b> (${Number(r.days||0)} hari)<br><span class="tiny muted">${t} • ${esc(r.status||"open")}</span><div style="margin-top:8px">${action}</div></div>`}).join("")||`<div class="notice">Belum ada permintaan Premium.</div>`;
   }catch(err){$("supportResults").textContent="Gagal memuat permintaan: "+err.message.replace("Firebase: ","");}
 }
-window.adminVerifyPremium=async id=>{try{await runTransaction(db,async tx=>{const reqRef=doc(db,"supportRequests",id);const snap=await tx.get(reqRef);if(!snap.exists())throw new Error("Permintaan tidak ditemukan.");const r=snap.data();if(r.status!=="waiting_verification")throw new Error("Permintaan ini sudah diproses.");const days=Number(r.days||0);if(!r.uid||days<=0)throw new Error("Data pembelian tidak valid.");const code=activationCode();const until=new Date(Date.now()+days*86400000);tx.set(doc(db,"premiumActivations",code),{uid:r.uid,plan:r.plan||"Premium",days,premiumUntil:until,used:false,createdAt:serverTimestamp()});tx.update(reqRef,{status:"ready",activationCode:code,verifiedAt:serverTimestamp()});tx.set(doc(collection(db,"inbox")),{uid:r.uid,title:"PREMIUM",subject:"Kode aktivasi Premium kamu",message:`Pembayaran ${r.plan||"Premium"} telah diverifikasi admin. Kode aktivasi: ${code}. Masukkan kode ini di Pengaturan > Aktivasi Premium.`,activationCode:code,read:false,createdAt:serverTimestamp()});});toast("Pembayaran diverifikasi. Kode aktivasi dibuat dan dikirim ke Inbox.");loadSupportRequests();}catch(err){toast(err.message.replace("Firebase: ",""));}};
+window.adminVerifyPremium=async id=>{try{await runTransaction(db,async tx=>{const reqRef=doc(db,"supportRequests",id);const snap=await tx.get(reqRef);if(!snap.exists())throw new Error("Permintaan tidak ditemukan.");const r=snap.data();if(r.status!=="waiting_verification")throw new Error("Permintaan ini sudah diproses.");const days=Number(r.days||0);if(!r.uid||days<=0)throw new Error("Data pembelian tidak valid.");const code=activationCode(); if(code.length!==20)throw new Error("Gagal membuat kode aktivasi 20 karakter."); const until=new Date(Date.now()+days*86400000);tx.set(doc(db,"premiumActivations",code),{uid:r.uid,plan:r.plan||"Premium",days,premiumUntil:until,used:false,codeLength:20,createdAt:serverTimestamp()});tx.update(reqRef,{status:"ready",activationCode:code,verifiedAt:serverTimestamp()});tx.set(doc(collection(db,"inbox")),{uid:r.uid,title:"PREMIUM",subject:"Kode aktivasi Premium kamu",message:`Pembayaran ${r.plan||"Premium"} telah diverifikasi admin. Kode aktivasi (20 karakter): ${code}. Masukkan kode ini di Pengaturan > Aktivasi Premium.`,activationCode:code,read:false,createdAt:serverTimestamp()});});toast("Pembayaran diverifikasi. Kode aktivasi dibuat dan dikirim ke Inbox.");loadSupportRequests();}catch(err){toast(err.message.replace("Firebase: ",""));}};
 window.adminCloseSupport=async id=>{try{await updateDoc(doc(db,"supportRequests",id),{status:"done",handledAt:serverTimestamp()});toast("Permintaan ditandai selesai.");loadSupportRequests();}catch(err){toast(err.message.replace("Firebase: ",""));}};
 
 $("userSearchForm").onsubmit=async e=>{e.preventDefault();const u=await getUserByUsername($("userSearch").value);$("userResults").innerHTML=u?`<div class="notice"><b>${esc(u.displayName)}</b> @${esc(u.username)}<br>Premium: ${isPremiumActive(u.premiumUntil)?"aktif":"tidak"}<br>Pembelian Premium: ${Number(u.premiumPurchases||0)}<br>Admin: ${u.isAdmin?"ya":"tidak"}<br>Banned: ${u.banned?"ya":"tidak"}<div style="margin-top:10px;display:flex;gap:6px"><button class="secondary" onclick="adminToggleBan('${u.id}',${!u.banned})">${u.banned?"Unban":"Ban"}</button><button class="secondary" onclick="adminSuspend('${u.id}')">Suspend 24h</button><button class="secondary" onclick="adminUnsuspend('${u.id}')">Unsuspend</button></div></div>`:"<div class='notice'>User tidak ditemukan.</div>"};

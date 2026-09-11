@@ -72,7 +72,7 @@
       <section id="page-join" class="page hidden">
         <div class="form-card glass narrow">
           <span class="eyebrow">JOIN</span><h2>Masuk ke forum</h2><p class="muted">Masukkan secret code yang kamu dapat dari anggota/admin forum.</p>
-          <form id="joinForm"><label>Secret code<input id="joinCode" required placeholder="Masukkan 18 karakter kode"></label><button class="primary wide">Bergabung</button></form>
+          <form id="joinForm"><label>Secret code<input id="joinCode" required placeholder="Masukkan secret code"></label><button class="primary wide">Bergabung</button></form>
         </div>
       </section>
 
@@ -86,6 +86,7 @@
             <div id="customCodeNote" class="notice">Kode custom hanya aktif untuk akun Premium. Akun biasa akan mendapatkan kode acak.</div>
             <button class="primary wide">Buat Forum</button>
           </form>
+          <div id="createdCodeNotice" class="notice hidden created-code-notice"></div>
         </div>
       </section>
 
@@ -101,7 +102,7 @@
           <hr>
           <div class="activation-card">
             <h3>Aktivasi Premium</h3>
-            <p class="muted">Masukkan kode aktivasi yang diberikan setelah pembayaran kamu diverifikasi.</p>
+            <p class="muted">Masukkan kode aktivasi 20 karakter yang dikirim Admin ke Inbox setelah pembayaran diverifikasi.</p>
             <form id="activationForm"><div class="activation-row"><input id="activationCode" maxlength="20" minlength="20" placeholder="20 karakter kode aktivasi" autocomplete="off"><button class="primary">Aktifkan</button></div></form>
             <div id="activationStatus" class="notice hidden"></div>
           </div>

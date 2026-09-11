@@ -86,7 +86,7 @@ service cloud.firestore {
 
     match /premiumActivations/{code} {
       allow read: if admin() || (activeUser() && resource.data.uid == request.auth.uid);
-      allow create: if admin() && request.resource.data.uid is string && request.resource.data.plan is string &&
+      allow create: if admin() && request.resource.id.size() == 20 && request.resource.data.uid is string && request.resource.data.plan is string &&
         request.resource.data.days is int && request.resource.data.days > 0 && request.resource.data.used == false;
       allow update: if activeUser() && resource.data.uid == request.auth.uid && resource.data.used == false &&
         request.resource.data.used == true && request.resource.data.uid == resource.data.uid;
@@ -105,6 +105,8 @@ service cloud.firestore {
          get(/databases/$(database)/documents/forumCodes/$(resource.data.secretCode)).data.forumId == forumId));
       allow create: if activeUser() && request.resource.data.ownerId == request.auth.uid &&
         request.resource.data.maxMembers is int && request.resource.data.maxMembers >= 2 && request.resource.data.maxMembers <= 400 &&
+        request.resource.data.secretCode is string &&
+        (request.resource.data.secretCode.size() == 18 || premiumActive()) &&
         (request.resource.data.maxMembers <= 20 || premiumActive());
 
       // Owner tetap owner selamanya karena ownerId tidak pernah berubah, meskipun owner keluar dari memberIds.

@@ -18,3 +18,5 @@ textarea{width:100%;resize:none;min-height:42px;max-height:150px;overflow-y:auto
 @media(max-width:640px){.inbox-item{flex-direction:column;align-items:stretch}.translator-actions{flex-direction:column}.translator-actions button{width:100%}}
 
 .forum-status{font-size:10px;font-weight:800;letter-spacing:.05em;margin:8px 0}.forum-status.active{color:#7be5a5}.forum-status.suspended{color:#f6c85f}.forum-status.banned{color:#ff7777}.msg-translate{transition:.18s ease}.msg-translate:active{transform:translateY(1px)}
+
+.created-code-notice{margin-top:14px}.created-code-row{display:flex;align-items:center;gap:8px;margin-top:8px}.created-code-row code{flex:1;display:block;overflow-wrap:anywhere;padding:12px;border-radius:12px;background:#080e1a;border:1px solid var(--line);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#c9bfff;letter-spacing:.08em}.created-code-row button{white-space:nowrap}
