@@ -25,7 +25,7 @@ const db = getFirestore(app);
 const $ = id => document.getElementById(id);
 let currentUser = null, profile = null, activeForum = null, unsubscribeMessages = null, unsubscribeProfile = null, unsubscribeActivations = null, unsubscribeInbox = null, authMode = "login";
 // Website creator / Author. Securely configure this UID, or create authors/{UID} with enabled:true in Firestore.
-const AUTHOR_UID = "REPLACE_WITH_WEBSITE_CREATOR_UID";
+const AUTHOR_UID = "Lt8kkzctunb1lXA1rGxz1xXuYlv2";
 const isAuthor = () => !!profile?.isAuthor;
 const canAdmin = () => isAuthor() || !!profile?.isAdmin;
 const canSeeActivity = () => canAdmin();
