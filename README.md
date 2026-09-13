@@ -14,3 +14,6 @@ Karena Firebase harus mengetahui UID pembuat website secara aman, buat dokumen F
 
 ## Deploy
 Deploy semua file aplikasi dan **firestore.rules** dari ZIP ini.
+
+
+Premium pricing: 1 minggu Rp1.000, 1 bulan Rp2.000, 1 tahun Rp4.000. Untuk QRIS, ganti area placeholder pembayaran dengan gambar QRIS milikmu (misalnya file qris.png) dan referensikan file tersebut dari index.html. Jangan masukkan data pembayaran sensitif ke Firestore client-side.
