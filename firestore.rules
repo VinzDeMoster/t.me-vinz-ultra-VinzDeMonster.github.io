@@ -11,13 +11,12 @@ service cloud.firestore {
       );
     }
     function admin() {
-      return signedIn() && !author() &&
-        (
-          (exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
-           get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.get("enabled", false) == true) ||
-          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get("isAdmin", false) == true)
-        );
+      return signedIn() && !author() && (
+        (exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.get("enabled", false) == true) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get("isAdmin", false) == true)
+      );
     }
     function privileged() { return author() || admin(); }
     function targetAdmin(uid) {
@@ -25,8 +24,7 @@ service cloud.firestore {
         get(/databases/$(database)/documents/admins/$(uid)).data.get("enabled", false) == true;
     }
     function activeUser() {
-      return signedIn() &&
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+      return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get("banned", false) != true &&
         (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get("suspendedUntil", null) == null ||
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get("suspendedUntil", null) <= request.time);
@@ -39,30 +37,29 @@ service cloud.firestore {
         (u.get("premiumUntil", null) is number && u.get("premiumUntil", null) > request.time.toMillis())
       );
     }
-    function forumOwner(forumId) {
-      return activeUser() && get(/databases/$(database)/documents/forums/$(forumId)).data.ownerId == request.auth.uid;
-    }
     function forumAvailable(forumId) {
       let f = get(/databases/$(database)/documents/forums/$(forumId)).data;
       return f.get("banned", false) != true &&
         (f.get("suspendedUntil", null) == null || f.get("suspendedUntil", null) <= request.time);
     }
+    function forumOwner(forumId) {
+      return activeUser() && get(/databases/$(database)/documents/forums/$(forumId)).data.ownerId == request.auth.uid;
+    }
 
     match /authors/{uid} {
-      allow read: if author() || self(uid);
+      allow read: if privileged() || self(uid);
       allow create, update, delete: if author();
     }
 
     match /users/{uid} {
       allow read: if self(uid) || privileged();
       allow create: if self(uid);
-      // Only Author may permanently ban/suspend/unban/unsuspend an Admin. Admins can moderate non-admin users.
       allow update: if author() ||
-        (admin() && !targetAdmin(uid) && uid != request.auth.uid &&
+        (admin() && uid != request.auth.uid && !targetAdmin(uid) &&
          request.resource.data.username == resource.data.username &&
          request.resource.data.usernameLower == resource.data.usernameLower &&
          request.resource.data.isAdmin == resource.data.isAdmin &&
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['banned','suspendedUntil','premiumUntil','premiumPurchases','lastActivationCode','displayName'])) ||
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['banned','suspendedUntil','displayName'])) ||
         (activeUser() && self(uid) &&
          request.resource.data.username == resource.data.username &&
          request.resource.data.usernameLower == resource.data.usernameLower &&
@@ -71,7 +68,6 @@ service cloud.firestore {
          request.resource.data.suspendedUntil == resource.data.suspendedUntil &&
          request.resource.data.get('premiumPurchases',0) == resource.data.get('premiumPurchases',0) &&
          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName'])) ||
-        // A normal user may redeem exactly one activation code issued to that same user.
         (activeUser() && self(uid) &&
          request.resource.data.username == resource.data.username &&
          request.resource.data.usernameLower == resource.data.usernameLower &&
@@ -81,9 +77,10 @@ service cloud.firestore {
          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['premiumUntil','premiumPurchases','lastActivationCode']) &&
          request.resource.data.lastActivationCode is string &&
          request.resource.data.lastActivationCode.size() == 20 &&
+         exists(/databases/$(database)/documents/premiumActivations/$(request.resource.data.lastActivationCode)) &&
          get(/databases/$(database)/documents/premiumActivations/$(request.resource.data.lastActivationCode)).data.uid == request.auth.uid &&
-         get(/databases/$(database)/documents/premiumActivations/$(request.resource.data.lastActivationCode)).data.used == false &&
-         getAfter(/databases/$(database)/documents/premiumActivations/$(request.resource.data.lastActivationCode)).data.used == true &&
+         get(/databases/$(database)/documents/premiumActivations/$(request.resource.data.lastActivationCode)).data.get('used',false) == false &&
+         getAfter(/databases/$(database)/documents/premiumActivations/$(request.resource.data.lastActivationCode)).data.get('used',false) == true &&
          request.resource.data.premiumUntil == get(/databases/$(database)/documents/premiumActivations/$(request.resource.data.lastActivationCode)).data.premiumUntil &&
          request.resource.data.premiumPurchases == resource.data.get('premiumPurchases',0) + 1);
       allow delete: if author() || admin();
@@ -91,13 +88,11 @@ service cloud.firestore {
 
     match /admins/{uid} {
       allow read: if privileged() || self(uid);
-      // Admins cannot promote/demote other Admins. Only Author can change Admin roles.
       allow create, update, delete: if author();
     }
 
     match /supportRequests/{requestId} {
-      allow create: if activeUser() && request.resource.data.uid == request.auth.uid &&
-        request.resource.data.username is string && request.resource.data.type is string;
+      allow create: if activeUser() && request.resource.data.uid == request.auth.uid && request.resource.data.username is string && request.resource.data.type is string;
       allow read: if privileged() || (activeUser() && resource.data.uid == request.auth.uid);
       allow update, delete: if privileged();
     }
@@ -105,70 +100,64 @@ service cloud.firestore {
     match /inbox/{messageId} {
       allow read: if privileged() || (activeUser() && resource.data.uid == request.auth.uid);
       allow create: if privileged();
-      allow update: if privileged() || (activeUser() && resource.data.uid == request.auth.uid &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']));
+      allow update: if privileged() || (activeUser() && resource.data.uid == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']));
       allow delete: if privileged() || (activeUser() && resource.data.uid == request.auth.uid);
     }
 
     match /premiumActivations/{code} {
       allow read: if privileged() || (activeUser() && resource.data.uid == request.auth.uid);
-      allow create: if privileged() && request.resource.id.size() == 20 && request.resource.data.uid is string &&
-        request.resource.data.plan is string && request.resource.data.days is int && request.resource.data.days > 0 &&
-        request.resource.data.used == false;
-      allow update: if activeUser() && resource.data.uid == request.auth.uid && resource.data.used == false &&
-        request.resource.data.used == true && request.resource.data.uid == resource.data.uid;
+      allow create: if privileged() && request.resource.id.size() == 20 && request.resource.data.uid is string && request.resource.data.plan is string && request.resource.data.days is int && request.resource.data.days > 0 && request.resource.data.used == false;
+      allow update: if activeUser() && resource.data.uid == request.auth.uid && resource.data.used == false && request.resource.data.used == true && request.resource.data.uid == resource.data.uid;
       allow delete: if privileged();
     }
 
     match /activityLogs/{logId} {
       allow read: if privileged();
-      allow create: if activeUser() && request.resource.data.actorId == request.auth.uid && request.resource.data.message is string && request.resource.data.actorRole is string;
+      allow create: if allowedUser() && request.resource.data.actorId == request.auth.uid && request.resource.data.message is string && request.resource.data.actorRole is string;
       allow update, delete: if author();
     }
 
     match /forumCodes/{code} {
       allow read: if signedIn();
-      allow create: if (privileged() || activeUser()) && request.resource.data.forumId is string;
+      allow create: if allowedUser() && request.resource.data.forumId is string;
       allow update, delete: if privileged();
     }
 
     match /forums/{forumId} {
-      allow read: if privileged() || (allowedUser() &&
-        (request.auth.uid == resource.data.ownerId ||
-         request.auth.uid in resource.data.get("memberIds", []) ||
-         (exists(/databases/$(database)/documents/forumCodes/$(resource.data.secretCode)) &&
-          get(/databases/$(database)/documents/forumCodes/$(resource.data.secretCode)).data.get("forumId", "") == forumId)));
-      allow create: if (privileged() || activeUser()) && request.resource.data.ownerId == request.auth.uid &&
+      allow read: if privileged() || (activeUser() && (
+        request.auth.uid == resource.data.ownerId ||
+        request.auth.uid in resource.data.get('memberIds', []) ||
+        (exists(/databases/$(database)/documents/forumCodes/$(resource.data.secretCode)) &&
+         get(/databases/$(database)/documents/forumCodes/$(resource.data.secretCode)).data.get('forumId','') == forumId)
+      ));
+
+      allow create: if allowedUser() && request.resource.data.ownerId == request.auth.uid &&
         request.resource.data.maxMembers is int && request.resource.data.maxMembers >= 2 &&
         request.resource.data.secretCode is string &&
         (privileged() ||
          (request.resource.data.secretCode.size() == 18 && request.resource.data.maxMembers <= 20) ||
          (premiumActive() && request.resource.data.maxMembers <= 400));
 
-      // Owner remains the original creator forever. Author/Admin can administrate all forum fields.
-      allow update: if (privileged() &&
+      allow update: if privileged() &&
         request.resource.data.ownerId == resource.data.ownerId &&
         request.resource.data.name == resource.data.name &&
         request.resource.data.secretCode == resource.data.secretCode &&
         request.resource.data.createdAt == resource.data.createdAt &&
-        request.resource.data.maxMembers is int &&
-        request.resource.data.maxMembers >= 2 &&
-        (author() || request.resource.data.maxMembers <= 400 || admin()) &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['banned','suspendedUntil','bannedAt','bannedBy','suspendedAt','suspendedBy','ownerOnly','maxMembers'])) ||
-        (forumOwner(forumId) &&
-         request.resource.data.name == resource.data.name &&
-         request.resource.data.maxMembers == resource.data.maxMembers &&
-         request.resource.data.secretCode == resource.data.secretCode &&
-         request.resource.data.ownerId == resource.data.ownerId &&
-         request.resource.data.createdAt == resource.data.createdAt &&
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds','ownerOnly']) &&
-         request.resource.data.memberIds.size() <= resource.data.memberIds.size() &&
-         (request.resource.data.memberIds.size() == resource.data.memberIds.size() ||
-          request.resource.data.memberIds.size() == resource.data.memberIds.size() - 1) &&
-         resource.data.memberIds.hasAll(request.resource.data.memberIds));
+        request.resource.data.maxMembers is int && request.resource.data.maxMembers >= 2 &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['banned','suspendedUntil','bannedAt','bannedBy','suspendedAt','suspendedBy','ownerOnly','maxMembers']);
+
+      allow update: if forumOwner(forumId) &&
+        request.resource.data.name == resource.data.name &&
+        request.resource.data.maxMembers == resource.data.maxMembers &&
+        request.resource.data.secretCode == resource.data.secretCode &&
+        request.resource.data.ownerId == resource.data.ownerId &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds','ownerOnly']) &&
+        request.resource.data.memberIds.size() <= resource.data.memberIds.size() &&
+        resource.data.memberIds.hasAll(request.resource.data.memberIds);
 
       allow update: if activeUser() && forumAvailable(forumId) &&
-        request.auth.uid in request.resource.data.get("memberIds", []) &&
+        request.auth.uid in request.resource.data.get('memberIds', []) &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds']) &&
         request.resource.data.name == resource.data.name &&
         request.resource.data.maxMembers == resource.data.maxMembers &&
@@ -182,36 +171,25 @@ service cloud.firestore {
       allow delete: if author();
 
       match /members/{uid} {
-        allow read: if privileged() || (activeUser() && forumAvailable(forumId) &&
-          (request.auth.uid == uid || forumOwner(forumId)));
-        // getAfter() makes this work both when a forum is being created in a transaction
-        // and when an existing member joins. It avoids a permission failure from reading
-        // a parent forum before its transaction write is visible.
-        allow create: if (privileged() || activeUser()) &&
-          request.auth.uid == uid &&
-          request.resource.data.username is string &&
-          request.resource.data.displayName is string &&
+        allow read: if privileged() || (activeUser() && forumAvailable(forumId) && (request.auth.uid == uid || forumOwner(forumId)));
+        allow create: if allowedUser() && request.auth.uid == uid && request.resource.data.username is string && request.resource.data.displayName is string &&
           getAfter(/databases/$(database)/documents/forums/$(forumId)).data.ownerId is string &&
-          request.auth.uid in getAfter(/databases/$(database)/documents/forums/$(forumId)).data.get("memberIds", []) &&
-          getAfter(/databases/$(database)/documents/forums/$(forumId)).data.get("banned", false) != true &&
-          (getAfter(/databases/$(database)/documents/forums/$(forumId)).data.get("suspendedUntil", null) == null ||
-           getAfter(/databases/$(database)/documents/forums/$(forumId)).data.get("suspendedUntil", null) <= request.time);
+          request.auth.uid in getAfter(/databases/$(database)/documents/forums/$(forumId)).data.get('memberIds', []);
         allow update: if privileged() || (activeUser() && self(uid));
         allow delete: if privileged() || (forumOwner(forumId) && uid != request.auth.uid) || self(uid);
       }
 
       match /messages/{messageId} {
-        allow read: if privileged() || (allowedUser() && forumAvailable(forumId) &&
-          request.auth.uid in get(/databases/$(database)/documents/forums/$(forumId)).data.get("memberIds", []));
-        allow create: if allowedUser() &&
-          request.resource.data.uid == request.auth.uid &&
+        allow read: if privileged() || (activeUser() && forumAvailable(forumId) && request.auth.uid in get(/databases/$(database)/documents/forums/$(forumId)).data.get('memberIds', []));
+        allow create: if privileged() && request.resource.data.uid == request.auth.uid &&
           request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 1000 &&
-          request.resource.data.isAdmin == admin() &&
-          request.resource.data.isAuthor == author() &&
-          request.resource.data.premiumPurchases == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get("premiumPurchases",0) &&
-          (privileged() || (forumAvailable(forumId) && request.auth.uid in get(/databases/$(database)/documents/forums/$(forumId)).data.get("memberIds", []) &&
-            (get(/databases/$(database)/documents/forums/$(forumId)).data.get("ownerOnly",false) != true ||
-             get(/databases/$(database)/documents/forums/$(forumId)).data.ownerId == request.auth.uid)));
+          request.resource.data.isAdmin == admin() && request.resource.data.isAuthor == author() &&
+          request.resource.data.premiumPurchases == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('premiumPurchases',0) ||
+          (activeUser() && request.resource.data.uid == request.auth.uid && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 1000 &&
+           request.resource.data.isAdmin == false && request.resource.data.isAuthor == false &&
+           request.resource.data.premiumPurchases == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('premiumPurchases',0) &&
+           forumAvailable(forumId) && request.auth.uid in get(/databases/$(database)/documents/forums/$(forumId)).data.get('memberIds', []) &&
+           (get(/databases/$(database)/documents/forums/$(forumId)).data.get('ownerOnly',false) != true || get(/databases/$(database)/documents/forums/$(forumId)).data.ownerId == request.auth.uid));
         allow update, delete: if privileged() || (activeUser() && resource.data.uid == request.auth.uid);
       }
     }

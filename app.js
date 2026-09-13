@@ -299,7 +299,7 @@ async function loadForums(){
     // Owner is always kept inside memberIds when the forum is created, so using
     // the memberIds query avoids a Firestore rules/query mismatch on ownerId.
     const joined=await getDocs(query(collection(db,"forums"),where("memberIds","array-contains",currentUser.uid)));
-    const map=new Map(); [...owned.docs,...joined.docs].forEach(d=>{const f={id:d.id,...d.data()}; map.set(d.id,f);});
+    const map=new Map(); [...joined.docs].forEach(d=>{const f={id:d.id,...d.data()}; map.set(d.id,f);});
     $("forumList").innerHTML=[...map.values()].map(f=>{const suspended=premiumUntilMillis(f.suspendedUntil)>Date.now(); const status=f.banned?"BANNED • PERMANEN":(suspended?"SUSPENDED • SAMPAI "+new Date(premiumUntilMillis(f.suspendedUntil)).toLocaleString("id-ID"):"AKTIF"); return `<div class="forum-card glass"><span class="eyebrow">PRIVATE FORUM</span><h3>${esc(f.name)}</h3><p class="muted">${(f.memberIds||[]).length}/${f.maxMembers||"∞"} anggota</p><p class="code">Secret code: ${esc(f.secretCode||"Belum tersedia")}</p><p class="forum-status ${f.banned?"banned":suspended?"suspended":"active"}">${esc(status)}</p><button class="secondary wide" data-open="${f.id}">Buka forum</button></div>`}).join("")||`<div class="form-card glass"><h3>Belum ada forum</h3><p class="muted">Buat forum baru atau bergabung dengan secret code.</p></div>`;
     document.querySelectorAll("[data-open]").forEach(b=>b.onclick=async()=>{try{const s=await getDoc(doc(db,"forums",b.dataset.open)); if(s.exists())openForum(s.id,s.data()); else toast("Forum tidak ditemukan.");}catch(err){toast(err.message.replace("Firebase: ",""));}});
   }catch(err){
@@ -479,7 +479,8 @@ $("messageForm").onsubmit=async e=>{
   if(activeForum.ownerOnly===true && activeForum.ownerId!==currentUser.uid && !canAdmin())return toast("Hanya owner yang dapat mengirim pesan.");
   try{
     await addDoc(collection(db,"forums",activeForum.id,"messages"),{uid:currentUser.uid,displayName:profile.displayName,isAdmin:profile.isAdmin===true,isAuthor:profile.isAuthor===true,premiumPurchases:Number(profile.premiumPurchases||0),text:text.slice(0,1000),createdAt:serverTimestamp()});
-    await logActivity("message_sent",`Mengirim pesan di forum “${activeForum.name||"Forum"}”`,{forumId:activeForum.id,forumName:activeForum.name||"Forum"});
+    // Activity logging must never make a successfully sent message look like it failed.
+    logActivity("message_sent",`Mengirim pesan di forum “${activeForum.name||"Forum"}”`,{forumId:activeForum.id,forumName:activeForum.name||"Forum"}).catch(()=>{});
     input.value=""; input.style.height="auto";
   }catch(err){toast(err.message.replace("Firebase: ",""));}
 };
@@ -488,7 +489,7 @@ $("messageInput").addEventListener("input",()=>{
 });
 
 let selectedPremiumPlan=null;
-const PREMIUM_PRICES={"1 minggu":10000,"1 bulan":299890,"1 tahun":2299800};
+const PREMIUM_PRICES={"1 minggu":1000,"1 bulan":2000,"1 tahun":4000};
 document.querySelectorAll("[data-buy-plan]").forEach(btn=>btn.onclick=()=>{
   selectedPremiumPlan=btn.dataset.buyPlan;
   $("paymentPlanText").textContent=`Paket yang dipilih: Premium ${selectedPremiumPlan} • Rp${(PREMIUM_PRICES[selectedPremiumPlan]||0).toLocaleString("id-ID")}.`;
