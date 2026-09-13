@@ -29,3 +29,4 @@ textarea{width:100%;resize:none;min-height:42px;max-height:150px;overflow-y:auto
 .activity-stat span{display:block;font-size:10px;color:var(--muted);margin-bottom:5px}
 .activity-stat b{font-size:20px}
 @media(max-width:640px){.activity-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.activity-log{display:grid;gap:8px}.activity-item{display:flex;justify-content:space-between;gap:12px;padding:12px;border:1px solid var(--line);border-radius:12px;background:rgba(8,14,26,.5)}.activity-item p{margin:4px 0 0;line-height:1.45}.activity-item .tiny{white-space:nowrap}@media(max-width:640px){.activity-item{flex-direction:column}.activity-item .tiny{white-space:normal}}

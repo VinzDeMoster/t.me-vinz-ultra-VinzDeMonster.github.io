@@ -47,6 +47,8 @@
         <button class="nav" data-page="inbox">✉ <span>Inbox</span><span id="inboxBadge" class="inbox-badge hidden">0</span></button>
         <button class="nav" data-page="contact">✦ <span>Premium</span></button>
         <button class="nav hidden" id="adminNav" data-page="admin">♛ <span>Admin</span></button>
+        <button class="nav hidden" id="authorNav" data-page="author">👑 <span>Author</span></button>
+        <button class="nav" data-page="activity">◷ <span>Aktivitas</span></button>
       </nav>
       <button id="logoutBtn" class="nav logout">↪ Keluar</button>
     </aside>
@@ -157,17 +159,23 @@
           <div class="form-card glass"><h3>Kelola user</h3><form id="userSearchForm"><input id="userSearch" placeholder="Cari username"><button class="secondary wide">Cari</button></form><div id="userResults"></div></div>
           <div class="form-card glass"><h3>Moderasi forum</h3><form id="forumModerationForm"><input id="moderationCode" placeholder="Secret code forum"><select id="forumModerationMode"><option value="ban">Ban forum</option><option value="unban">Unban forum</option><option value="suspend">Suspend forum</option><option value="unsuspend">Unsuspend forum</option></select><input id="forumSuspendHours" type="number" min="1" value="24" placeholder="Jam suspend"><button class="secondary wide">Terapkan</button></form><p class="tiny muted">Ban/suspend forum memblokir akses anggota. Admin tetap dapat mengaksesnya.</p></div>
           <div class="form-card glass"><h3>Berikan / cabut Premium</h3><form id="premiumForm"><input id="premiumUsername" placeholder="Username"><div class="two"><select id="premiumMode"><option value="grant">Berikan Premium</option><option value="revoke">Jadikan Biasa</option></select><input id="premiumDays" type="number" min="1" value="7" placeholder="Hari"></div><button class="primary wide">Terapkan</button></form><p class="tiny muted">Admin/Author dapat mengelola Premium tanpa batas fitur.</p></div>
+          <div class="form-card glass"><span class="eyebrow">INBOX</span><h3>Kirim pesan ke user</h3><p class="muted">Kirim pemberitahuan langsung ke Inbox akun.</p><form id="adminInboxForm"><input id="adminInboxUsername" placeholder="Username penerima" required><input id="adminInboxSubject" placeholder="Judul pesan" maxlength="100" required><textarea id="adminInboxMessage" rows="4" maxlength="1000" placeholder="Isi pemberitahuan..." required></textarea><button class="secondary wide">Kirim ke Inbox</button></form></div>
         
-          <div id="authorControls" class="form-card glass hidden">
-            <span class="eyebrow">AUTHOR ONLY</span><h3>Otoritas Author</h3>
-            <p class="muted">Pembuat website • otoritas tertinggi.</p>
-            <div class="author-note">Author dapat mengelola semua role kecuali dirinya sendiri, mengangkat/mencopot Admin, ban permanen, suspend, unban, unsuspend, dan menghapus forum secara permanen.</div>
-          </div>
-          <div id="authorActivityCard" class="form-card glass hidden">
-            <div class="section-head"><div><span class="eyebrow">AUTHOR ONLY</span><h3>Aktivitas Keseluruhan</h3><p class="muted">Ringkasan aktivitas seluruh website.</p></div><button class="secondary" id="refreshAuthorActivityBtn" type="button">Refresh</button></div>
-            <div id="authorActivityResults" class="notice">Belum dimuat.</div>
-          </div>
         </div>
+      </section>
+
+      <section id="page-author" class="page hidden">
+        <div class="section-head"><div><span class="eyebrow">OWNER CONTROL CENTER</span><h2>Author Panel</h2><p class="muted">Panel khusus pemilik utama website. Otoritas tertinggi.</p></div></div>
+        <div class="admin-grid">
+          <div class="form-card glass"><span class="eyebrow">AUTHOR ONLY</span><h3>Kelola user & role</h3><form id="authorUserSearchForm"><input id="authorUserSearch" placeholder="Cari username" required><button class="secondary wide">Cari</button></form><div id="authorUserResults"></div></div>
+          <div class="form-card glass"><span class="eyebrow">AUTHOR ONLY</span><h3>Hapus forum</h3><p class="muted">Hapus forum secara permanen beserta pesan, anggota, dan secret code.</p><form id="authorDeleteForumForm"><input id="authorDeleteForumCode" placeholder="Secret code forum" required><button class="secondary wide">Hapus forum permanen</button></form></div>
+          <div class="form-card glass"><span class="eyebrow">INBOX</span><h3>Kirim pesan ke user</h3><p class="muted">Author dapat mengirim pengumuman atau pemberitahuan ke Inbox user.</p><form id="authorInboxForm"><input id="authorInboxUsername" placeholder="Username penerima" required><input id="authorInboxSubject" placeholder="Judul pesan" maxlength="100" required><textarea id="authorInboxMessage" rows="4" maxlength="1000" placeholder="Isi pemberitahuan..." required></textarea><button class="primary wide">Kirim ke Inbox</button></form></div>
+          <div class="form-card glass"><span class="eyebrow">AUTHOR ONLY</span><h3>Aktivitas lengkap</h3><p class="muted">Riwayat tindakan Admin dan Author yang tercatat di website.</p><button class="secondary" id="refreshAuthorActivityBtn" type="button">Refresh aktivitas</button><div id="authorActivityResults" class="activity-log" style="margin-top:12px"></div></div>
+        </div>
+      </section>
+
+      <section id="page-activity" class="page hidden">
+        <div class="form-card glass"><span class="eyebrow">ACTIVITY LOG</span><h2>Aktivitas Website</h2><p class="muted">Catatan tindakan moderasi dan administrasi. Dapat dilihat semua role.</p><div id="publicActivityResults" class="activity-log"><div class="notice">Belum dimuat.</div></div></div>
       </section>
 
       <section id="page-forum" class="page hidden">

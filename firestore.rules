@@ -36,8 +36,8 @@ service cloud.firestore {
     function premiumActive() {
       let u = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
       return (u.get("premiumUntil", null) != null) && (
-        (u.premiumUntil is timestamp && u.premiumUntil > request.time) ||
-        (u.premiumUntil is number && u.premiumUntil > request.time.toMillis())
+        (u.get("premiumUntil", null) is timestamp && u.get("premiumUntil", null) > request.time) ||
+        (u.get("premiumUntil", null) is number && u.get("premiumUntil", null) > request.time.toMillis())
       );
     }
     function forumOwner(forumId) {
@@ -46,7 +46,7 @@ service cloud.firestore {
     function forumAvailable(forumId) {
       let f = get(/databases/$(database)/documents/forums/$(forumId)).data;
       return f.get("banned", false) != true &&
-        (f.get("suspendedUntil", null) == null || f.suspendedUntil <= request.time);
+        (f.get("suspendedUntil", null) == null || f.get("suspendedUntil", null) <= request.time);
     }
 
     match /authors/{uid} {
@@ -58,7 +58,12 @@ service cloud.firestore {
       allow read: if self(uid) || privileged();
       allow create: if self(uid);
       // Only Author may permanently ban/suspend/unban/unsuspend an Admin. Admins can moderate non-admin users.
-      allow update: if author() || (admin() && !targetAdmin(uid) && uid != request.auth.uid) ||
+      allow update: if author() ||
+        (admin() && !targetAdmin(uid) && uid != request.auth.uid &&
+         request.resource.data.username == resource.data.username &&
+         request.resource.data.usernameLower == resource.data.usernameLower &&
+         request.resource.data.isAdmin == resource.data.isAdmin &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['banned','suspendedUntil','premiumUntil','premiumPurchases','lastActivationCode','displayName'])) ||
         (activeUser() && self(uid) &&
          request.resource.data.username == resource.data.username &&
          request.resource.data.usernameLower == resource.data.usernameLower &&
@@ -102,6 +107,12 @@ service cloud.firestore {
       allow delete: if privileged();
     }
 
+    match /activityLogs/{logId} {
+      allow read: if signedIn();
+      allow create: if privileged() && request.resource.data.actorId == request.auth.uid && request.resource.data.message is string;
+      allow update, delete: if author();
+    }
+
     match /forumCodes/{code} {
       allow read: if signedIn();
       allow create: if (privileged() || activeUser()) && request.resource.data.forumId is string;
@@ -111,7 +122,8 @@ service cloud.firestore {
     match /forums/{forumId} {
       allow read: if privileged() || (allowedUser() &&
         (request.auth.uid in resource.data.get("memberIds", []) ||
-         get(/databases/$(database)/documents/forumCodes/$(resource.data.secretCode)).data.forumId == forumId));
+         (exists(/databases/$(database)/documents/forumCodes/$(resource.data.secretCode)) &&
+          get(/databases/$(database)/documents/forumCodes/$(resource.data.secretCode)).data.get("forumId", "") == forumId)));
       allow create: if (privileged() || activeUser()) && request.resource.data.ownerId == request.auth.uid &&
         request.resource.data.maxMembers is int && request.resource.data.maxMembers >= 2 &&
         request.resource.data.secretCode is string &&
@@ -119,7 +131,13 @@ service cloud.firestore {
          (premiumActive() && request.resource.data.maxMembers <= 400));
 
       // Owner remains the original creator forever. Author/Admin can administrate all forum fields.
-      allow update: if privileged() ||
+      allow update: if (privileged() &&
+        request.resource.data.ownerId == resource.data.ownerId &&
+        request.resource.data.name == resource.data.name &&
+        request.resource.data.maxMembers == resource.data.maxMembers &&
+        request.resource.data.secretCode == resource.data.secretCode &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['banned','suspendedUntil','bannedAt','bannedBy','suspendedAt','suspendedBy','ownerOnly'])) ||
         (forumOwner(forumId) &&
          request.resource.data.name == resource.data.name &&
          request.resource.data.maxMembers == resource.data.maxMembers &&
