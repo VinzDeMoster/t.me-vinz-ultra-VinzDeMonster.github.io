@@ -25,7 +25,7 @@ const db = getFirestore(app);
 const $ = id => document.getElementById(id);
 let currentUser = null, profile = null, activeForum = null, unsubscribeMessages = null, unsubscribeProfile = null, unsubscribeActivations = null, unsubscribeInbox = null, authMode = "login";
 // Website creator / Author. Securely configure this UID, or create authors/{UID} with enabled:true in Firestore.
-const AUTHOR_UID = "Lt8kkzctunb1lXA1rGxz1xXuYlv2";
+const AUTHOR_UID = "REPLACE_WITH_WEBSITE_CREATOR_UID";
 const isAuthor = () => !!profile?.isAuthor;
 const canAdmin = () => isAuthor() || !!profile?.isAdmin;
 const canSeeActivity = () => canAdmin();
@@ -485,7 +485,7 @@ $("messageInput").addEventListener("input",()=>{
 });
 
 let selectedPremiumPlan=null;
-const PREMIUM_PRICES={"1 minggu":1000,"1 bulan":2000,"1 tahun":4000};
+const PREMIUM_PRICES={"1 minggu":10.000,"1 bulan":299.899,"1 tahun":3.260.800};
 document.querySelectorAll("[data-buy-plan]").forEach(btn=>btn.onclick=()=>{
   selectedPremiumPlan=btn.dataset.buyPlan;
   $("paymentPlanText").textContent=`Paket yang dipilih: Premium ${selectedPremiumPlan} • Rp${(PREMIUM_PRICES[selectedPremiumPlan]||0).toLocaleString("id-ID")}.`;
