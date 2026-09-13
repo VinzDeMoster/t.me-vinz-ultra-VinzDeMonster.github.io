@@ -28,6 +28,7 @@ let currentUser = null, profile = null, activeForum = null, unsubscribeMessages 
 const AUTHOR_UID = "REPLACE_WITH_WEBSITE_CREATOR_UID";
 const isAuthor = () => !!profile?.isAuthor;
 const canAdmin = () => isAuthor() || !!profile?.isAdmin;
+const canSeeActivity = () => canAdmin();
 const actorRole = () => isAuthor() ? "Author" : (profile?.isAdmin ? "Admin" : "User");
 async function logActivity(type,message,extra={}){if(!canAdmin())return;try{await addDoc(collection(db,"activityLogs"),{type,message,actorId:currentUser.uid,actorName:profile.displayName,actorUsername:profile.username,actorRole:actorRole(),createdAt:serverTimestamp(),...extra});}catch(e){console.warn("activity log:",e);}}
 const roleBadgeHTML = role => role === "author" ? '<span class="role-badge author">AUTHOR</span>' : role === "admin" ? '<span class="role-badge admin">ADMIN</span>' : '';
@@ -75,6 +76,10 @@ function updateMemberLimitUI(){
   if(customNote) customNote.textContent=(premium||unlimited) ? "Premium dapat menentukan secret code sendiri. Admin/Author memiliki akses penuh." : "Kode akun biasa dibuat otomatis 18 karakter dan tidak dapat diubah.";
 }
 function showPage(name){
+  if((name==="admin" && !canAdmin()) || (name==="author" && !isAuthor()) || (name==="activity" && !canSeeActivity())){
+    toast("Kamu tidak memiliki akses ke halaman ini.");
+    return;
+  }
   document.querySelectorAll(".page").forEach(x=>x.classList.add("hidden"));
   $("page-"+name)?.classList.remove("hidden");
   document.querySelectorAll(".nav").forEach(x=>x.classList.toggle("active",x.dataset.page===name));
@@ -93,6 +98,9 @@ function setLoggedInUI(){
   $("sidebarName").textContent=profile.displayName; $("sidebarUsername").textContent="@"+profile.username; $("avatar").textContent=(profile.displayName||"?")[0].toUpperCase();
   $("settingsUsername").value=profile.username; $("settingsDisplayName").value=profile.displayName;
   const roleEl=$("sidebarRole"); if(roleEl){ roleEl.classList.toggle("hidden",!(profile.isAuthor||profile.isAdmin)); roleEl.textContent=profile.isAuthor?"AUTHOR":"ADMIN"; }
+  $("adminNav")?.classList.toggle("hidden", !profile.isAdmin && !profile.isAuthor);
+  $("authorNav")?.classList.toggle("hidden", !profile.isAuthor);
+  $("activityNav")?.classList.toggle("hidden", !canSeeActivity());
   const premiumActive=isPremiumActive(profile.premiumUntil);
   $("sidebarPremium").classList.toggle("hidden",!premiumActive);
   $("adminNav").classList.toggle("hidden",!canAdmin()); $("authorNav")?.classList.toggle("hidden",!isAuthor()); $("adminSettingsCard").classList.toggle("hidden",!canAdmin());
@@ -672,7 +680,7 @@ async function renderActivity(container){
     $(container).innerHTML=s.docs.map(d=>{const r=d.data(),t=r.createdAt?.toDate?.().toLocaleString("id-ID")||"baru saja";return `<div class="activity-item"><div><b>${esc(r.actorRole||"Admin")}</b> • ${esc(r.actorName||r.actorUsername||"User")}<p>${esc(r.message||"Aktivitas")}</p></div><span class="tiny muted">${esc(t)}</span></div>`}).join("")||`<div class="notice">Belum ada aktivitas tercatat.</div>`;
   }catch(e){$(container).innerHTML=`<div class="notice">Gagal memuat aktivitas: ${esc(e.message.replace("Firebase: ",""))}</div>`;}
 }
-function loadPublicActivity(){if(currentUser)renderActivity("publicActivityResults");}
+function loadPublicActivity(){if(currentUser && canSeeActivity())renderActivity("publicActivityResults");}
 function loadAuthorPanel(){if(isAuthor())renderActivity("authorActivityResults");}
 $("refreshAuthorActivityBtn")?.addEventListener("click",()=>renderActivity("authorActivityResults"));
 $("authorDeleteForumForm")?.addEventListener("submit",async e=>{e.preventDefault();const code=$("authorDeleteForumCode").value.trim();if(code){await authorDeleteForum(code);e.target.reset();}});

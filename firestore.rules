@@ -69,10 +69,24 @@ service cloud.firestore {
          request.resource.data.usernameLower == resource.data.usernameLower &&
          request.resource.data.isAdmin == resource.data.isAdmin &&
          request.resource.data.banned == resource.data.banned &&
-         request.resource.data.premiumUntil == resource.data.premiumUntil &&
          request.resource.data.suspendedUntil == resource.data.suspendedUntil &&
          request.resource.data.get('premiumPurchases',0) == resource.data.get('premiumPurchases',0) &&
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName']));
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName'])) ||
+        // A normal user may redeem exactly one activation code issued to that same user.
+        (activeUser() && self(uid) &&
+         request.resource.data.username == resource.data.username &&
+         request.resource.data.usernameLower == resource.data.usernameLower &&
+         request.resource.data.isAdmin == resource.data.isAdmin &&
+         request.resource.data.banned == resource.data.banned &&
+         request.resource.data.suspendedUntil == resource.data.suspendedUntil &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['premiumUntil','premiumPurchases','lastActivationCode']) &&
+         request.resource.data.lastActivationCode is string &&
+         request.resource.data.lastActivationCode.size() == 20 &&
+         get(/databases/$(database)/documents/premiumActivations/$(request.resource.data.lastActivationCode)).data.uid == request.auth.uid &&
+         get(/databases/$(database)/documents/premiumActivations/$(request.resource.data.lastActivationCode)).data.used == false &&
+         getAfter(/databases/$(database)/documents/premiumActivations/$(request.resource.data.lastActivationCode)).data.used == true &&
+         request.resource.data.premiumUntil == get(/databases/$(database)/documents/premiumActivations/$(request.resource.data.lastActivationCode)).data.premiumUntil &&
+         request.resource.data.premiumPurchases == resource.data.get('premiumPurchases',0) + 1);
       allow delete: if author() || admin();
     }
 
@@ -108,7 +122,7 @@ service cloud.firestore {
     }
 
     match /activityLogs/{logId} {
-      allow read: if signedIn();
+      allow read: if privileged();
       allow create: if privileged() && request.resource.data.actorId == request.auth.uid && request.resource.data.message is string;
       allow update, delete: if author();
     }
@@ -134,10 +148,12 @@ service cloud.firestore {
       allow update: if (privileged() &&
         request.resource.data.ownerId == resource.data.ownerId &&
         request.resource.data.name == resource.data.name &&
-        request.resource.data.maxMembers == resource.data.maxMembers &&
         request.resource.data.secretCode == resource.data.secretCode &&
         request.resource.data.createdAt == resource.data.createdAt &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['banned','suspendedUntil','bannedAt','bannedBy','suspendedAt','suspendedBy','ownerOnly'])) ||
+        request.resource.data.maxMembers is int &&
+        request.resource.data.maxMembers >= 2 &&
+        (author() || request.resource.data.maxMembers <= 400 || admin()) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['banned','suspendedUntil','bannedAt','bannedBy','suspendedAt','suspendedBy','ownerOnly','maxMembers'])) ||
         (forumOwner(forumId) &&
          request.resource.data.name == resource.data.name &&
          request.resource.data.maxMembers == resource.data.maxMembers &&
@@ -167,8 +183,18 @@ service cloud.firestore {
       match /members/{uid} {
         allow read: if privileged() || (activeUser() && forumAvailable(forumId) &&
           (request.auth.uid == uid || forumOwner(forumId)));
-        allow create: if (privileged() || activeUser()) && forumAvailable(forumId) && request.auth.uid == uid &&
-          request.resource.data.username is string && request.resource.data.displayName is string;
+        // getAfter() makes this work both when a forum is being created in a transaction
+        // and when an existing member joins. It avoids a permission failure from reading
+        // a parent forum before its transaction write is visible.
+        allow create: if (privileged() || activeUser()) &&
+          request.auth.uid == uid &&
+          request.resource.data.username is string &&
+          request.resource.data.displayName is string &&
+          getAfter(/databases/$(database)/documents/forums/$(forumId)).data.ownerId is string &&
+          request.auth.uid in getAfter(/databases/$(database)/documents/forums/$(forumId)).data.get("memberIds", []) &&
+          getAfter(/databases/$(database)/documents/forums/$(forumId)).data.get("banned", false) != true &&
+          (getAfter(/databases/$(database)/documents/forums/$(forumId)).data.get("suspendedUntil", null) == null ||
+           getAfter(/databases/$(database)/documents/forums/$(forumId)).data.get("suspendedUntil", null) <= request.time);
         allow update: if privileged() || (activeUser() && self(uid));
         allow delete: if privileged() || (forumOwner(forumId) && uid != request.auth.uid) || self(uid);
       }
