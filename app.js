@@ -30,7 +30,7 @@ const isAuthor = () => !!profile?.isAuthor;
 const canAdmin = () => isAuthor() || !!profile?.isAdmin;
 const canSeeActivity = () => canAdmin();
 const actorRole = () => isAuthor() ? "Author" : (profile?.isAdmin ? "Admin" : "User");
-async function logActivity(type,message,extra={}){if(!canAdmin())return;try{await addDoc(collection(db,"activityLogs"),{type,message,actorId:currentUser.uid,actorName:profile.displayName,actorUsername:profile.username,actorRole:actorRole(),createdAt:serverTimestamp(),...extra});}catch(e){console.warn("activity log:",e);}}
+async function logActivity(type,message,extra={}){if(!currentUser||!profile)return;try{await addDoc(collection(db,"activityLogs"),{type,message,actorId:currentUser.uid,actorName:profile.displayName,actorUsername:profile.username,actorRole:actorRole(),createdAt:serverTimestamp(),...extra});}catch(e){console.warn("activity log:",e);}}
 const roleBadgeHTML = role => role === "author" ? '<span class="role-badge author">AUTHOR</span>' : role === "admin" ? '<span class="role-badge admin">ADMIN</span>' : '';
 
 const toast = (msg,duration=2500) => { $("toast").textContent = msg; $("toast").classList.add("show"); setTimeout(()=>$("toast").classList.remove("show"),duration); };
@@ -291,6 +291,7 @@ $("joinForm").onsubmit=async e=>{
     });
     const latest=await getDoc(ref);
     openForum(forumId,latest.data());
+    await logActivity("forum_joined",`Bergabung ke forum “${latest.data()?.name||"Forum"}”`,{forumId,forumName:latest.data()?.name||"Forum"});
   }catch(err){ toast(err.message.replace("Firebase: ","")); }
 };
 async function loadForums(){
@@ -477,6 +478,7 @@ $("messageForm").onsubmit=async e=>{
   if(activeForum.ownerOnly===true && activeForum.ownerId!==currentUser.uid && !canAdmin())return toast("Hanya owner yang dapat mengirim pesan.");
   try{
     await addDoc(collection(db,"forums",activeForum.id,"messages"),{uid:currentUser.uid,displayName:profile.displayName,isAdmin:profile.isAdmin===true,isAuthor:profile.isAuthor===true,premiumPurchases:Number(profile.premiumPurchases||0),text:text.slice(0,1000),createdAt:serverTimestamp()});
+    await logActivity("message_sent",`Mengirim pesan di forum “${activeForum.name||"Forum"}”`,{forumId:activeForum.id,forumName:activeForum.name||"Forum"});
     input.value=""; input.style.height="auto";
   }catch(err){toast(err.message.replace("Firebase: ",""));}
 };
