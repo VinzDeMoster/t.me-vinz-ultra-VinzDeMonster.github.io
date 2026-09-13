@@ -134,7 +134,8 @@ service cloud.firestore {
 
     match /forums/{forumId} {
       allow read: if privileged() || (allowedUser() &&
-        (request.auth.uid in resource.data.get("memberIds", []) ||
+        (request.auth.uid == resource.data.ownerId ||
+         request.auth.uid in resource.data.get("memberIds", []) ||
          (exists(/databases/$(database)/documents/forumCodes/$(resource.data.secretCode)) &&
           get(/databases/$(database)/documents/forumCodes/$(resource.data.secretCode)).data.get("forumId", "") == forumId)));
       allow create: if (privileged() || activeUser()) && request.resource.data.ownerId == request.auth.uid &&

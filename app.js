@@ -296,7 +296,8 @@ $("joinForm").onsubmit=async e=>{
 };
 async function loadForums(){
   try{
-    const owned=await getDocs(query(collection(db,"forums"),where("ownerId","==",currentUser.uid)));
+    // Owner is always kept inside memberIds when the forum is created, so using
+    // the memberIds query avoids a Firestore rules/query mismatch on ownerId.
     const joined=await getDocs(query(collection(db,"forums"),where("memberIds","array-contains",currentUser.uid)));
     const map=new Map(); [...owned.docs,...joined.docs].forEach(d=>{const f={id:d.id,...d.data()}; map.set(d.id,f);});
     $("forumList").innerHTML=[...map.values()].map(f=>{const suspended=premiumUntilMillis(f.suspendedUntil)>Date.now(); const status=f.banned?"BANNED • PERMANEN":(suspended?"SUSPENDED • SAMPAI "+new Date(premiumUntilMillis(f.suspendedUntil)).toLocaleString("id-ID"):"AKTIF"); return `<div class="forum-card glass"><span class="eyebrow">PRIVATE FORUM</span><h3>${esc(f.name)}</h3><p class="muted">${(f.memberIds||[]).length}/${f.maxMembers||"∞"} anggota</p><p class="code">Secret code: ${esc(f.secretCode||"Belum tersedia")}</p><p class="forum-status ${f.banned?"banned":suspended?"suspended":"active"}">${esc(status)}</p><button class="secondary wide" data-open="${f.id}">Buka forum</button></div>`}).join("")||`<div class="form-card glass"><h3>Belum ada forum</h3><p class="muted">Buat forum baru atau bergabung dengan secret code.</p></div>`;
