@@ -181,15 +181,15 @@ service cloud.firestore {
 
       match /messages/{messageId} {
         allow read: if privileged() || (activeUser() && forumAvailable(forumId) && request.auth.uid in get(/databases/$(database)/documents/forums/$(forumId)).data.get('memberIds', []));
-        allow create: if privileged() && request.resource.data.uid == request.auth.uid &&
-          request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 1000 &&
-          request.resource.data.isAdmin == admin() && request.resource.data.isAuthor == author() &&
-          request.resource.data.premiumPurchases == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('premiumPurchases',0) ||
-          (activeUser() && request.resource.data.uid == request.auth.uid && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 1000 &&
-           request.resource.data.isAdmin == false && request.resource.data.isAuthor == false &&
-           request.resource.data.premiumPurchases == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('premiumPurchases',0) &&
-           forumAvailable(forumId) && request.auth.uid in get(/databases/$(database)/documents/forums/$(forumId)).data.get('memberIds', []) &&
-           (get(/databases/$(database)/documents/forums/$(forumId)).data.get('ownerOnly',false) != true || get(/databases/$(database)/documents/forums/$(forumId)).data.ownerId == request.auth.uid));
+        allow create: if request.resource.data.uid == request.auth.uid &&
+        request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 1000 &&
+        request.resource.data.isAdmin == admin() &&
+        request.resource.data.isAuthor == author() &&
+        request.resource.data.premiumPurchases == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('premiumPurchases',0) &&
+        (privileged() ||
+          (activeUser() && forumAvailable(forumId) &&
+           request.auth.uid in get(/databases/$(database)/documents/forums/$(forumId)).data.get('memberIds', []) &&
+           (get(/databases/$(database)/documents/forums/$(forumId)).data.get('ownerOnly',false) != true || get(/databases/$(database)/documents/forums/$(forumId)).data.ownerId == request.auth.uid)));
         allow update, delete: if privileged() || (activeUser() && resource.data.uid == request.auth.uid);
       }
     }

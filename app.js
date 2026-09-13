@@ -238,8 +238,8 @@ $("createForm").onsubmit=async e=>{
           if(codeSnap.exists())throw new Error("__CODE_EXISTS__");
           tx.set(forumRef,{name,maxMembers:max,secretCode:secret,ownerId:currentUser.uid,memberIds:[currentUser.uid],ownerOnly:false,createdAt:serverTimestamp()});
           tx.set(codeRef,{forumId:forumRef.id,createdAt:serverTimestamp()});
-          tx.set(doc(db,"forums",forumRef.id,"members",currentUser.uid),{displayName:profile.displayName,username:profile.username,role:"owner",joinedAt:serverTimestamp()});
         });
+        await setDoc(doc(db,"forums",forumRef.id,"members",currentUser.uid),{displayName:profile.displayName,username:profile.username,role:"owner",joinedAt:serverTimestamp()});
         created=true;
       }catch(e){
         if(e?.message!=="__CODE_EXISTS__"||custom||attempt===4)throw e;
@@ -679,6 +679,21 @@ async function sendInboxMessage(usernameId,subjectId,messageId){
 }
 $("adminInboxForm")?.addEventListener("submit",e=>{e.preventDefault();sendInboxMessage("adminInboxUsername","adminInboxSubject","adminInboxMessage")});
 $("authorInboxForm")?.addEventListener("submit",e=>{e.preventDefault();sendInboxMessage("authorInboxUsername","authorInboxSubject","authorInboxMessage")});
+async function broadcastInboxMessage(subject,message){
+  if(!isAuthor())return toast("Hanya Author yang dapat mengirim ke seluruh user.");
+  if(!subject||!message)return toast("Lengkapi judul dan isi pesan.");
+  try{
+    const users=await getDocs(collection(db,"users"));
+    for(let i=0;i<users.docs.length;i+=450){
+      const batch=writeBatch(db);
+      users.docs.slice(i,i+450).forEach(u=>batch.set(doc(collection(db,"inbox")),{uid:u.id,title:"AUTHOR",subject,message,senderId:currentUser.uid,senderRole:"Author",senderName:profile.displayName,read:false,createdAt:serverTimestamp()}));
+      await batch.commit();
+    }
+    await logActivity("inbox_broadcast",`Mengirim pesan ke seluruh user: ${subject}`,{subject,recipientCount:users.size});
+    $("authorBroadcastSubject").value=""; $("authorBroadcastMessage").value=""; toast(`Pesan dikirim ke ${users.size} user.`);
+  }catch(e){toast(e.message.replace("Firebase: ",""));}
+}
+$("authorBroadcastForm")?.addEventListener("submit",e=>{e.preventDefault();broadcastInboxMessage($("authorBroadcastSubject").value.trim(),$("authorBroadcastMessage").value.trim())});
 async function renderActivity(container){
   try{
     const s=await getDocs(query(collection(db,"activityLogs"),orderBy("createdAt","desc"),limit(100)));
