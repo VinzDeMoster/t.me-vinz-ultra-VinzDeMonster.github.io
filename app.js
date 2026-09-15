@@ -31,6 +31,9 @@ const $ = id => document.getElementById(id);
 let currentUser = null, profile = null, activeForum = null, unsubscribeMessages = null, unsubscribeProfile = null, unsubscribeActivations = null, unsubscribeInbox = null, unsubscribeMaintenance = null, authMode = "login";
 let lastAdShownAt = 0, adScheduleTimeout = null;
 const messageTextCache = new Map();
+const localBotReplies = new Map();
+const botHandledCommands = new Set();
+let botExpiryTimer = null;
 // Website creator / Author. Securely configure this UID, or create authors/{UID} with enabled:true in Firestore.
 const AUTHOR_UID = "Lt8kkzctunb1lXA1rGxz1xXuYlv2";
 const isAuthor = () => !!profile?.isAuthor;
@@ -146,7 +149,7 @@ async function loadProfile(user){
   profile={uid:user.uid,...data,premiumPurchases:Number(data.premiumPurchases||0),isAdmin,isAuthor};
   if(unsubscribeMaintenance)unsubscribeMaintenance();
   unsubscribeMaintenance=onSnapshot(doc(db,"siteSettings","maintenance"),s=>{
-    const m=s.exists()?s.data():{}; applyMaintenance(m.enabled===true, m.message||"");
+    const m=s.exists()?s.data():{}; applyMaintenance(m.enabled===true, m.message||"", m.imageUrl||"");
   },e=>console.warn("maintenance:",e));
   if(unsubscribeProfile)unsubscribeProfile();
   if(unsubscribeActivations)unsubscribeActivations();
@@ -168,24 +171,31 @@ async function loadProfile(user){
   });
   setLoggedInUI();
 }
-function applyMaintenance(enabled,message=""){
+function applyMaintenance(enabled,message="",imageUrl=""){
   const modal=$("maintenanceModal"); if(!modal)return;
   const blocked=enabled && !!profile && !canAdmin();
-  $("maintenanceMessage").textContent=message||"Untuk Sementara Waktu Website Ini Tidak Bisa Di Pakai!!";
-  modal.classList.toggle("hidden",!blocked);
-  document.body.classList.toggle("maintenance-active",blocked);
+  $("maintenanceMessage").textContent=message||"Untuk sementara waktu website ini tidak dapat digunakan.";
+  const img=$("maintenanceImage");
+  if(img){img.src=imageUrl||"";img.classList.toggle("hidden",!imageUrl);}
+  modal.classList.toggle("hidden",!blocked); document.body.classList.toggle("maintenance-active",blocked);
 }
-async function saveMaintenance(enabled,message){
+async function saveMaintenance(enabled,message,imageFile=null){
   if(!canAdmin())return toast("Hanya Admin/Author yang dapat mengatur maintenance.");
-  try{await setDoc(doc(db,"siteSettings","maintenance"),{enabled:Boolean(enabled),message:String(message||""),updatedBy:currentUser.uid,updatedRole:actorRole(),updatedAt:serverTimestamp()},{merge:true}); await logActivity(enabled?"maintenance_on":"maintenance_off",enabled?"Mengaktifkan maintenance website":"Menonaktifkan maintenance website"); toast(enabled?"Maintenance diaktifkan.":"Maintenance dinonaktifkan.");}
-  catch(e){toast(e.message.replace("Firebase: ",""));}
+  try{
+    const old=await getDoc(doc(db,"siteSettings","maintenance")); let imageUrl=old.exists()?old.data().imageUrl||"":"";
+    if(imageFile) imageUrl=(await uploadCloudinaryFile(imageFile,`secret-forum/maintenance/${currentUser.uid}`,10*1024*1024))?.url||imageUrl;
+    await setDoc(doc(db,"siteSettings","maintenance"),{enabled:Boolean(enabled),message:String(message||""),imageUrl,updatedBy:currentUser.uid,updatedRole:actorRole(),updatedAt:serverTimestamp()},{merge:true});
+    await logActivity(enabled?"maintenance_on":"maintenance_off",enabled?"Mengaktifkan maintenance website":"Menonaktifkan maintenance website"); toast(enabled?"Maintenance diaktifkan.":"Maintenance dinonaktifkan."); applyMaintenance(Boolean(enabled),String(message||""),imageUrl);
+  }catch(e){toast(e.message.replace("Firebase: ",""));}
 }
 async function loadMaintenanceSettings(){
   if(!canAdmin())return;
-  try{const s=await getDoc(doc(db,"siteSettings","maintenance"));const d=s.exists()?s.data():{}; ["admin","author"].forEach(role=>{const a=$(role+"MaintenanceEnabled"),m=$(role+"MaintenanceMessage");if(a)a.checked=d.enabled===true;if(m)m.value=d.message||"";}); applyMaintenance(d.enabled===true,d.message||"");}catch(e){console.warn("load maintenance:",e);}
+  try{const s=await getDoc(doc(db,"siteSettings","maintenance"));const d=s.exists()?s.data():{}; ["admin","author"].forEach(role=>{const a=$(role+"MaintenanceEnabled"),m=$(role+"MaintenanceMessage");if(a)a.checked=d.enabled===true;if(m)m.value=d.message||"";}); applyMaintenance(d.enabled===true,d.message||"",d.imageUrl||"");}catch(e){console.warn("load maintenance:",e);}
 }
-$("adminMaintenanceForm")?.addEventListener("submit",e=>{e.preventDefault();saveMaintenance($("adminMaintenanceEnabled").checked,$("adminMaintenanceMessage").value.trim());});
-$("authorMaintenanceForm")?.addEventListener("submit",e=>{e.preventDefault();saveMaintenance($("authorMaintenanceEnabled").checked,$("authorMaintenanceMessage").value.trim());});
+$("adminMaintenanceForm")?.addEventListener("submit",async e=>{e.preventDefault();await saveMaintenance($("adminMaintenanceEnabled").checked,$("adminMaintenanceMessage").value.trim(),$("adminMaintenanceImage")?.files?.[0]||null);});
+$("authorMaintenanceForm")?.addEventListener("submit",async e=>{e.preventDefault();await saveMaintenance($("authorMaintenanceEnabled").checked,$("authorMaintenanceMessage").value.trim(),$("authorMaintenanceImage")?.files?.[0]||null);});
+$("adminMaintenanceImage")?.addEventListener("change",e=>{const f=e.target.files?.[0];if($("adminMaintenanceImageName"))$("adminMaintenanceImageName").textContent=f?`${f.name} • ${formatBytes(f.size)}`:"";});
+$("authorMaintenanceImage")?.addEventListener("change",e=>{const f=e.target.files?.[0];if($("authorMaintenanceImageName"))$("authorMaintenanceImageName").textContent=f?`${f.name} • ${formatBytes(f.size)}`:"";});
 
 async function getUserByUsername(username){
   const q=query(collection(db,"users"),where("usernameLower","==",username.trim().toLowerCase()),limit(1)); const s=await getDocs(q); return s.empty?null:{id:s.docs[0].id,...s.docs[0].data()};
@@ -349,13 +359,35 @@ async function loadForums(){
     $("forumList").innerHTML=`<div class="notice">Gagal memuat forum: ${esc(err.message.replace("Firebase: ",""))}</div>`;
   }
 }
+const BOT_COMMANDS=["menu","help","ping","waktu","tanggal","info","forum","owner","anggota","kapasitas","sisa","status","mode","kode","bot","premium","profil","id","aturan","versi","random","angka","hitung","morse","angka2","hex","bin","base64","rot13","quote"];
+function botActiveFor(forum){return !!forum?.botCare?.enabled && premiumUntilMillis(forum.botCare.expiresAt)>Date.now();}
+function botMenuText(){return `Bot Care • 30 fitur\n\n#menu #help #ping #waktu #tanggal #info #forum #owner #anggota #kapasitas #sisa #status #mode #kode #bot #premium #profil #id #aturan #versi #random #angka teks #hitung rumus #morse teks #angka2 teks #hex teks #bin teks #base64 teks #rot13 teks #quote`}
+function encodeMorseText(v){const map={a:".-",b:"-...",c:"-.-.",d:"-..",e:".",f:"..-.",g:"--.",h:"....",i:"..",j:".---",k:"-.-",l:".-..",m:"--",n:"-.",o:"---",p:".--.",q:"--.-",r:".-.",s:"...",t:"-",u:"..-",v:"...-",w:".--",x:"-..-",y:"-.--",z:"--.."," ":"/"};return [...v.toLowerCase()].map(c=>map[c]||c).join(" ")}
+function encodeA1Z26(v){return [...v.toUpperCase()].map(c=>/[A-Z]/.test(c)?c.charCodeAt(0)-64:c===' '?0:c).join(' ')}
+function encodeHex(v){return [...v].map(c=>c.charCodeAt(0).toString(16).padStart(2,'0')).join(' ')}
+function encodeBinary(v){return [...v].map(c=>c.charCodeAt(0).toString(2).padStart(8,'0')).join(' ')}
+function encodeBase64(v){try{return btoa(unescape(encodeURIComponent(v)))}catch(e){return 'Gagal encode Base64.'}}
+function rot13(v){return v.replace(/[A-Za-z]/g,c=>String.fromCharCode(c<='Z'?((c.charCodeAt(0)-65+13)%26)+65:((c.charCodeAt(0)-97+13)%26)+97))}
+function botReply(command,forum){
+  const raw=command.trim(),parts=raw.split(/\s+/),cmd=(parts[0]||'').toLowerCase().replace(/^#/,'');const arg=raw.slice(parts[0]?.length||0).trim(),members=(forum.memberIds||[]).filter(x=>x!=='BOT_CARE').length,max=forum.maxMembers||0,now=new Date();
+  const r={menu:botMenuText(),help:'Gunakan #menu untuk daftar 30 fitur Bot Care.',ping:'Pong! Bot Care aktif ✓',waktu:`Sekarang pukul ${now.toLocaleTimeString('id-ID')}.`,tanggal:now.toLocaleDateString('id-ID',{weekday:'long',year:'numeric',month:'long',day:'numeric'}),info:`Forum: ${forum.name||'Forum'}\nAnggota: ${members}/${max||'∞'}`,forum:`Forum ${forum.name||'Forum'} aktif.`,owner:forum.ownerId===currentUser.uid?'Kamu adalah owner forum.':`UID owner: ${forum.ownerId}`,anggota:`Jumlah anggota: ${members}`,kapasitas:`Kapasitas: ${max||'tanpa batas'}`,sisa:max?`Sisa slot: ${Math.max(0,max-members)}`:'Tidak dibatasi',status:forum.banned?'Forum dibanned.':premiumUntilMillis(forum.suspendedUntil)>Date.now()?`Forum disuspend sampai ${new Date(premiumUntilMillis(forum.suspendedUntil)).toLocaleString('id-ID')}.`:'Forum aktif.',mode:forum.ownerOnly?'Hanya owner yang dapat mengirim chat.':'Semua anggota dapat mengirim chat.',kode:`Secret code: ${forum.secretCode||'tidak tersedia'}`,bot:botActiveFor(forum)?`Bot Care aktif sampai ${new Date(premiumUntilMillis(forum.botCare.expiresAt)).toLocaleString('id-ID')}.`:'Bot Care tidak aktif.',premium:'Premium: custom secret code, translator sandi, kapasitas sampai 400 anggota.',profil:`Nama: ${profile.displayName}\nUsername: @${profile.username}`,id:`UID kamu: ${currentUser.uid}`,aturan:'Hormati anggota lain, jangan spam, dan ikuti aturan forum.',versi:'Bot Care v1.0 • 30 fitur'};
+  if(r[cmd])return r[cmd]; if(cmd==='random')return `Angka acak: ${Math.floor(Math.random()*100000)+1}`; if(cmd==='angka'||cmd==='angka2')return arg?encodeA1Z26(arg):`Format: #${cmd} Halo`; if(cmd==='hitung')return arg?decodeFormula(arg):'Format: #hitung 12+5'; if(cmd==='morse')return arg?encodeMorseText(arg):'Format: #morse Halo'; if(cmd==='hex')return arg?encodeHex(arg):'Format: #hex Halo'; if(cmd==='bin')return arg?encodeBinary(arg):'Format: #bin Halo'; if(cmd==='base64')return arg?encodeBase64(arg):'Format: #base64 Halo'; if(cmd==='rot13')return arg?rot13(arg):'Format: #rot13 Halo'; if(cmd==='quote'){const q=['Tetap tenang dan lanjutkan.','Kode rahasia tetap aman.','Satu forum, satu ruang untuk berbagi.'];return q[Math.floor(Math.random()*q.length)]} return `Perintah #${cmd||''} belum dikenal. Ketik #menu.`;
+}
+function pushLocalBotReply(forumId,text){const arr=localBotReplies.get(forumId)||[];arr.push({text,createdAt:new Date()});if(arr.length>20)arr.shift();localBotReplies.set(forumId,arr);const box=$("messages");if(!box)return;box.insertAdjacentHTML('beforeend',`<div class="msg bot-msg"><div class="msg-head"><div class="msg-name">Bot Care <span class="bot-badge">BOT</span></div></div><div class="msg-text">${esc(text).replace(/\n/g,'<br>')}</div><div class="msg-time">${new Date().toLocaleString('id-ID')}</div></div>`);box.scrollTop=box.scrollHeight;}
+async function configureBot(code,days,remove=false){if(!canAdmin())return toast('Hanya Admin/Author yang dapat mengelola Bot Care.');try{const cs=await getDoc(doc(db,'forumCodes',code.trim()));if(!cs.exists())throw new Error('Secret code forum tidak ditemukan.');const forumId=cs.data().forumId,ref=doc(db,'forums',forumId),fs=await getDoc(ref);if(!fs.exists())throw new Error('Forum tidak ditemukan.');if(remove){await updateDoc(ref,{botCare:null});await logActivity('bot_removed',`Mengeluarkan Bot Care dari forum “${fs.data().name||'Forum'}”`,{forumId});toast('Bot Care dikeluarkan dari forum.');return}const n=Math.max(1,Math.min(3650,Number(days)||3));const expires=new Date(Date.now()+n*86400000);await updateDoc(ref,{botCare:{enabled:true,name:'Bot Care',botId:'BOT_CARE',expiresAt:expires,addedBy:currentUser.uid,addedRole:actorRole()}});await logActivity('bot_added',`Memasukkan Bot Care ke forum “${fs.data().name||'Forum'}” selama ${n} hari`,{forumId,days:n});toast(`Bot Care aktif ${n} hari.`)}catch(e){toast(e.message.replace('Firebase: ',''))}}
+$("adminBotForm")?.addEventListener('submit',async e=>{e.preventDefault();await configureBot($("adminBotCode").value,$("adminBotDays").value);e.target.reset();$("adminBotDays").value=3});
+$("authorBotForm")?.addEventListener('submit',async e=>{e.preventDefault();await configureBot($("authorBotCode").value,$("authorBotDays").value);e.target.reset();$("authorBotDays").value=3});
+$("adminBotRemoveBtn")?.addEventListener('click',async()=>{const c=prompt('Secret code forum:','');if(c)await configureBot(c,1,true)}); $("authorBotRemoveBtn")?.addEventListener('click',async()=>{const c=prompt('Secret code forum:','');if(c)await configureBot(c,1,true)});
+
 function openForum(id,data){
   if(!canAdmin() && data.banned===true)return toast("Forum ini telah dibanned oleh admin. Status: permanen.",7000);
   const su=premiumUntilMillis(data.suspendedUntil);
   if(!canAdmin() && su>Date.now())return toast("Forum ini sedang disuspend sampai "+new Date(su).toLocaleString("id-ID")+".",7000);
-  activeForum={id,...data}; showPage("forum");
+  activeForum={id,...data};
+  if(botExpiryTimer){clearTimeout(botExpiryTimer);botExpiryTimer=null;} if(activeForum.botCare?.enabled){const remain=premiumUntilMillis(activeForum.botCare.expiresAt)-Date.now();if(remain>0&&canAdmin())botExpiryTimer=setTimeout(()=>updateDoc(doc(db,"forums",id),{botCare:null}).then(()=>toast("Masa Bot Care berakhir. Bot otomatis dikeluarkan.")).catch(()=>{}),remain);else if(remain<=0&&canAdmin())updateDoc(doc(db,"forums",id),{botCare:null}).catch(()=>{});}
+  showPage("forum");
   $("activeForumName").textContent=data.name;
-  $("activeForumMeta").textContent=`${(data.memberIds||[]).length}/${data.maxMembers||"∞"} anggota • kode ${data.secretCode||"kode belum tersedia"}`;
+  $("activeForumMeta").textContent=`${(data.memberIds||[]).filter(x=>x!=="BOT_CARE").length}/${data.maxMembers||"∞"} anggota • kode ${data.secretCode||"kode belum tersedia"}${botActiveFor(data)?" • 🤖 Bot Care aktif":""}`;
   const isOwner=currentUser.uid===data.ownerId;
   $("ownerControls").classList.toggle("hidden",!isOwner);
   $("ownerModeBtn").textContent=data.ownerOnly?"Aktif • ON":"Nonaktif • OFF";
@@ -388,7 +420,7 @@ function openForum(id,data){
     if(!isOwner)return;
     try{
       const s=await getDocs(collection(db,"forums",id,"members"));
-      $("memberResults").innerHTML=s.docs.map(d=>{
+      $("memberResults").innerHTML=(botActiveFor(activeForum)?`<div class="member-item bot-member"><span><b>Bot Care</b><br><span class="tiny muted">BOT • sampai ${new Date(premiumUntilMillis(activeForum.botCare.expiresAt)).toLocaleString("id-ID")}</span></span><span class="tiny muted">BOT</span></div>`:"")+s.docs.map(d=>{
         const m=d.data(), self=d.id===currentUser.uid;
         return `<div class="member-item"><span><b>${esc(m.displayName||m.username||"User")}</b><br><span class="tiny muted">@${esc(m.username||"")}${m.role==="owner"?" • OWNER":""}</span></span>${self?'<span class="tiny muted">Kamu</span>':`<button class="secondary" data-kick="${d.id}">Kick</button>`}</div>`;
       }).join("")||'<div class="notice">Belum ada anggota.</div>';
@@ -437,6 +469,8 @@ function openForum(id,data){
       }
       return `<div class="msg ${me?"me":""}" data-message-id="${d.id}"><div class="msg-head"><div class="msg-name">${esc(m.displayName||"User")} ${authorBadge} ${verified} ${premiumBadge}</div>${deleteButton}</div><div class="msg-text ${isLong?"collapsed":""}" data-preview-text="${esc(preview)}">${esc(preview).replace(/\n/g,"<br>")}</div>${isLong?`<button class="read-more" data-read-more="${d.id}">Baca selengkapnya</button>`:""}${attachmentHTML}<div class="msg-tools">${translateButton}</div><div class="msg-time">${m.createdAt?.toDate?.().toLocaleString("id-ID")||"baru saja"}</div></div>`;
     }).join("") || '<div class="notice">Belum ada pesan.</div>';
+    const lr=localBotReplies.get(id)||[]; if(lr.length) box.insertAdjacentHTML("beforeend",lr.map(r=>`<div class="msg bot-msg"><div class="msg-head"><div class="msg-name">Bot Care <span class="bot-badge">BOT</span></div></div><div class="msg-text">${esc(r.text).replace(/\n/g,"<br>")}</div><div class="msg-time">${r.createdAt.toLocaleString("id-ID")}</div></div>`).join(""));
+    if(botActiveFor(activeForum)){const cutoff=Date.now()-10*60*1000;s.docs.forEach(d=>{const m=d.data(),created=m.createdAt?.toMillis?.()||0;if(typeof m.text==='string'&&m.text.trim().startsWith('#')&&created>=cutoff&&!botHandledCommands.has(d.id)){botHandledCommands.add(d.id);setTimeout(()=>pushLocalBotReply(id,botReply(m.text,activeForum),d.id),220);}});}
     box.querySelectorAll("[data-read-more]").forEach(btn=>btn.onclick=()=>{
       const msgEl=btn.closest(".msg")?.querySelector(".msg-text");
       const full=messageTextCache.get(btn.dataset.readMore)||"";
@@ -949,6 +983,6 @@ $("promoMonthly").onclick=()=>showPage("contact");
 
 onAuthStateChanged(auth,async user=>{
   currentUser=user;
-  if(!user){ profile=null; activeForum=null; if(unsubscribeMessages)unsubscribeMessages(); if(unsubscribeProfile)unsubscribeProfile(); if(unsubscribeActivations)unsubscribeActivations(); if(unsubscribeInbox)unsubscribeInbox(); if(unsubscribeMaintenance)unsubscribeMaintenance(); unsubscribeMessages=unsubscribeProfile=unsubscribeActivations=unsubscribeInbox=unsubscribeMaintenance=null; if(promoTimer){clearInterval(promoTimer); promoTimer=null;} if(window.adTimer){clearInterval(window.adTimer);window.adTimer=null;} if(adScheduleTimeout){clearTimeout(adScheduleTimeout);adScheduleTimeout=null;} $("promo")?.classList.add("hidden"); $("adModal")?.classList.add("hidden"); }
+  if(!user){ profile=null; activeForum=null; if(unsubscribeMessages)unsubscribeMessages(); if(unsubscribeProfile)unsubscribeProfile(); if(unsubscribeActivations)unsubscribeActivations(); if(unsubscribeInbox)unsubscribeInbox(); if(unsubscribeMaintenance)unsubscribeMaintenance(); unsubscribeMessages=unsubscribeProfile=unsubscribeActivations=unsubscribeInbox=unsubscribeMaintenance=null; if(promoTimer){clearInterval(promoTimer); promoTimer=null;} if(window.adTimer){clearInterval(window.adTimer);window.adTimer=null;} if(adScheduleTimeout){clearTimeout(adScheduleTimeout);adScheduleTimeout=null;} if(botExpiryTimer){clearTimeout(botExpiryTimer);botExpiryTimer=null;} $("promo")?.classList.add("hidden"); $("adModal")?.classList.add("hidden"); }
   if(user){try{await loadProfile(user);schedulePromo();scheduleAds()}catch(e){toast(e.message)}}else{$("appView").classList.add("hidden");$("authView").classList.remove("hidden");}
 });

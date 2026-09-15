@@ -121,7 +121,7 @@ service cloud.firestore {
 
     match /siteSettings/{settingId} {
       allow read: if signedIn();
-      allow create, update, delete: if privileged() && settingId == "maintenance";
+      allow create, update, delete: if privileged() && settingId == "maintenance" && request.resource.data.get("imageUrl", "") is string;
     }
 
     match /activityLogs/{logId} {
@@ -157,7 +157,7 @@ service cloud.firestore {
         request.resource.data.secretCode == resource.data.secretCode &&
         request.resource.data.createdAt == resource.data.createdAt &&
         request.resource.data.maxMembers is int && request.resource.data.maxMembers >= 2 &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['banned','suspendedUntil','bannedAt','bannedBy','suspendedAt','suspendedBy','ownerOnly','maxMembers']);
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['banned','suspendedUntil','bannedAt','bannedBy','suspendedAt','suspendedBy','ownerOnly','maxMembers','botCare']);
 
       allow update: if forumOwner(forumId) &&
         request.resource.data.name == resource.data.name &&
