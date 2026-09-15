@@ -35,3 +35,11 @@ textarea{width:100%;resize:none;min-height:42px;max-height:150px;overflow-y:auto
 .qr-placeholder{min-height:240px;height:240px;padding:12px;box-sizing:border-box;overflow:hidden;grid-template-rows:1fr auto;gap:6px}
 .payment-qr{display:block;width:220px;height:220px;max-width:100%;max-height:100%;object-fit:contain;margin:0 auto}
 @media(max-width:600px){.qr-placeholder{height:220px;min-height:220px}.payment-qr{width:190px;height:190px}}
+
+.user-monitor-card{padding:14px;border:1px solid var(--line);border-radius:14px;background:rgba(8,14,26,.5);margin-top:10px}
+.user-monitor-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px}
+.user-monitor-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:10px}
+.user-monitor-grid span{padding:9px;border:1px solid var(--line);border-radius:10px}
+.user-monitor-grid small{display:block;color:var(--muted);font-size:9px;margin-bottom:4px}
+.user-monitor-grid b{font-size:11px;overflow-wrap:anywhere}
+@media(max-width:640px){.user-monitor-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}

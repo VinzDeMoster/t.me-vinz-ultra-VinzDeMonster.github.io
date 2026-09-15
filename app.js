@@ -28,6 +28,7 @@ let currentUser = null, profile = null, activeForum = null, unsubscribeMessages 
 const AUTHOR_UID = "Lt8kkzctunb1lXA1rGxz1xXuYlv2";
 const isAuthor = () => !!profile?.isAuthor;
 const canAdmin = () => isAuthor() || !!profile?.isAdmin;
+const isAuthorUid = uid => uid === AUTHOR_UID;
 const canSeeActivity = () => canAdmin();
 const actorRole = () => isAuthor() ? "Author" : (profile?.isAdmin ? "Admin" : "User");
 async function logActivity(type,message,extra={}){if(!currentUser||!profile)return;try{await addDoc(collection(db,"activityLogs"),{type,message,actorId:currentUser.uid,actorName:profile.displayName,actorUsername:profile.username,actorRole:actorRole(),createdAt:serverTimestamp(),...extra});}catch(e){console.warn("activity log:",e);}}
@@ -727,6 +728,53 @@ function loadPublicActivity(){if(currentUser && canSeeActivity())renderActivity(
 function loadAuthorPanel(){if(isAuthor())renderActivity("authorActivityResults");}
 $("refreshAuthorActivityBtn")?.addEventListener("click",()=>renderActivity("authorActivityResults"));
 $("authorDeleteForumForm")?.addEventListener("submit",async e=>{e.preventDefault();const code=$("authorDeleteForumCode").value.trim();if(code){await authorDeleteForum(code);e.target.reset();}});
+
+async function loadUserMonitor(containerId){
+  if(!canAdmin()) return;
+  const box=$(containerId);
+  if(!box)return;
+  box.innerHTML='<div class="notice">Memuat data user dan forum…</div>';
+  try{
+    const [usersSnap, forumsSnap, adminsSnap, authorsSnap]=await Promise.all([
+      getDocs(collection(db,"users")),
+      getDocs(collection(db,"forums")),
+      getDocs(collection(db,"admins")),
+      getDocs(collection(db,"authors"))
+    ]);
+    const forums=forumsSnap.docs.map(d=>({id:d.id,...d.data()}));
+    const adminIds=new Set(adminsSnap.docs.filter(d=>d.data().enabled===true).map(d=>d.id));
+    const authorIds=new Set(authorsSnap.docs.filter(d=>d.data().enabled===true).map(d=>d.id));
+    authorIds.add(AUTHOR_UID);
+    const rows=usersSnap.docs.map(d=>{
+      const u={id:d.id,...d.data()};
+      const joined=forums.filter(f=>(f.memberIds||[]).includes(u.id));
+      const role=authorIds.has(u.id)?"Author":adminIds.has(u.id)?"Admin":"User";
+      const premium=isPremiumActive(u.premiumUntil)||u.premiumUnlimited===true;
+      const forumNames=joined.map(f=>f.name||"Forum");
+      return {u,joined,role,premium,forumNames};
+    }).sort((a,b)=>(a.u.username||"").localeCompare(b.u.username||""));
+    box.innerHTML=rows.map(({u,joined,role,premium,forumNames})=>{
+      const until=u.premiumUnlimited===true?"Tidak terbatas":(u.premiumUntil?new Date(premiumUntilMillis(u.premiumUntil)).toLocaleString("id-ID"):"-");
+      const status=u.banned?"BANNED":(premiumUntilMillis(u.suspendedUntil)>Date.now()?"SUSPENDED":"AKTIF");
+      return `<div class="user-monitor-card">
+        <div class="user-monitor-head"><div><b>${esc(u.displayName||"User")}</b><div class="tiny muted">@${esc(u.username||"-")}</div></div><span class="role-badge ${role.toLowerCase()}">${esc(role)}</span></div>
+        <div class="user-monitor-grid">
+          <span><small>Status</small><b>${esc(status)}</b></span>
+          <span><small>Premium</small><b>${premium?"Aktif":"Tidak"}</b></span>
+          <span><small>Premium sampai</small><b>${esc(until)}</b></span>
+          <span><small>Forum</small><b>${joined.length}</b></span>
+          <span><small>Pembelian Premium</small><b>${Number(u.premiumPurchases||0)}</b></span>
+          <span><small>Password</small><b>Tidak dapat dilihat</b></span>
+        </div>
+        <div class="tiny muted">Forum diikuti: ${forumNames.length?esc(forumNames.join(", ")): "Belum bergabung ke forum."}</div>
+      </div>`;
+    }).join("")||'<div class="notice">Belum ada user.</div>';
+  }catch(e){
+    box.innerHTML=`<div class="notice">Gagal memuat user: ${esc(e.message.replace("Firebase: ",""))}</div>`;
+  }
+}
+$("refreshUserMonitor")?.addEventListener("click",()=>loadUserMonitor("userMonitorResults"));
+$("refreshAuthorUserMonitor")?.addEventListener("click",()=>loadUserMonitor("authorUserMonitorResults"));
 $("authorUserSearchForm")?.addEventListener("submit",async e=>{
   e.preventDefault();
   try{
