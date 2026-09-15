@@ -33,3 +33,7 @@ Versi ini memakai Cloudinary untuk foto/video/file agar tidak memakai Firebase S
 6. Upload/deploy ulang website.
 
 Upload dilakukan langsung dari browser ke Cloudinary. Jangan memasukkan API Secret Cloudinary ke `app.js`.
+
+
+## Bot Care
+Bot Care menyediakan 50 perintah utilitas, game sederhana, moderasi forum, `#rawatforum`, dan `#clearall`. Sewa Bot Care dapat diaktifkan dengan kode 20 karakter pada Pengaturan dan satu lisensi berlaku maksimal 20 forum.

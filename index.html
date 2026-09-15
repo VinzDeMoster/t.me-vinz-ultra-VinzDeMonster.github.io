@@ -45,7 +45,7 @@
         <button class="nav" data-page="create">＋ <span>Buat Forum</span></button>
         <button class="nav" data-page="settings">⚙ <span>Pengaturan</span></button>
         <button class="nav" data-page="inbox">✉ <span>Inbox</span><span id="inboxBadge" class="inbox-badge hidden">0</span></button>
-        <button class="nav" data-page="contact">✦ <span>Premium</span></button>
+        <button class="nav" data-page="contact">✦ <span>Premium</span></button><button class="nav" data-page="bot-rental">🤖 <span>Sewa Bot</span></button>
         <button class="nav hidden" id="adminNav" data-page="admin">♛ <span>Admin</span></button>
         <button class="nav hidden" id="authorNav" data-page="author">👑 <span>Author</span></button>
         <button class="nav hidden" id="activityNav" data-page="activity">◷ <span>Aktivitas</span></button>
@@ -109,6 +109,14 @@
             <div id="activationStatus" class="notice hidden"></div>
           </div>
           <hr>
+          <div class="activation-card">
+            <h3>Aktivasi Bot Care</h3>
+            <p class="muted">Masukkan kode sewa Bot Care 20 karakter dan secret code forum. Satu kode dapat dipakai maksimal 20 forum.</p>
+            <form id="botActivationForm">
+              <div class="activation-row"><input id="botLicenseCode" maxlength="20" minlength="20" placeholder="Kode Bot Care 20 karakter" autocomplete="off"><input id="botLicenseForumCode" placeholder="Secret code forum" autocomplete="off"><button class="primary">Aktifkan Bot</button></div>
+            </form>
+          </div>
+          <hr>
           <form id="passwordForm">
             <h3>Ganti password</h3>
             <label>Password baru<input id="newPassword" type="password" minlength="6" required></label>
@@ -137,6 +145,21 @@
             <div class="premium-plan"><h3>1 Bulan</h3><strong>Rp299.800</strong><p class="muted">Akses fitur Premium selama 30 hari.</p><button class="primary wide" data-buy-plan="1 bulan">Beli Sekarang</button></div>
             <div class="premium-plan"><h3>1 Tahun</h3><strong>Rp710.000</strong><p class="muted">Akses fitur Premium selama 365 hari.</p><button class="primary wide" data-buy-plan="1 tahun">Beli Sekarang</button></div>
           </div>
+        </div>
+      </section>
+
+      <section id="page-bot-rental" class="page hidden">
+        <div class="form-card glass narrow">
+          <span class="eyebrow">BOT CARE</span><h2>Sewa Bot Care</h2>
+          <p class="muted">Bot otomatis untuk membantu merawat, mengelola, dan menyediakan fitur berguna di forum. Satu kode sewa dapat diaktifkan pada maksimal 20 forum.</p>
+          <div id="botRentalPlans" class="premium-plans">
+            <div class="premium-plan"><h3>3 Hari</h3><strong>Rp1.000</strong><p class="muted">Bot Care aktif 3 hari.</p><button class="primary wide" data-bot-plan="3 hari">Sewa Sekarang</button></div>
+            <div class="premium-plan"><h3>1 Minggu</h3><strong>Rp2.000</strong><p class="muted">Bot Care aktif 7 hari.</p><button class="primary wide" data-bot-plan="1 minggu">Sewa Sekarang</button></div>
+            <div class="premium-plan"><h3>2 Bulan</h3><strong>Rp5.000</strong><p class="muted">Bot Care aktif 60 hari.</p><button class="primary wide" data-bot-plan="2 bulan">Sewa Sekarang</button></div>
+            <div class="premium-plan"><h3>1 Tahun</h3><strong>Rp20.000</strong><p class="muted">Bot Care aktif 365 hari.</p><button class="primary wide" data-bot-plan="1 tahun">Sewa Sekarang</button></div>
+            <div class="premium-plan"><h3>Permanen</h3><strong>Rp50.000</strong><p class="muted">Bot Care tanpa batas waktu.</p><button class="primary wide" data-bot-plan="permanen">Sewa Sekarang</button></div>
+          </div>
+          <div class="notice">Setelah pembayaran diverifikasi Admin/Author, kode aktivasi 20 karakter dikirim ke Inbox.</div>
         </div>
       </section>
 
