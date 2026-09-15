@@ -65,6 +65,15 @@ const RANDOM_ALPHABET="ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789
 const randomChars = length => { const bytes=crypto.getRandomValues(new Uint8Array(length)); return Array.from(bytes, x=>RANDOM_ALPHABET[x % RANDOM_ALPHABET.length]).join(""); };
 const randomCode = () => { const chars=RANDOM_ALPHABET; let s=""; const a=crypto.getRandomValues(new Uint8Array(18)); for(const x of a)s+=chars[x%chars.length]; return s; };
 const activationCode = () => { const chars=RANDOM_ALPHABET; let s=""; const a=crypto.getRandomValues(new Uint8Array(20)); for(const x of a)s+=chars[x%chars.length]; return s; };
+async function uploadCloudinaryFile(file, folder, maxBytes=10*1024*1024){
+  if(!file) return null;
+  if(CLOUDINARY_CLOUD_NAME === "YOUR_CLOUD_NAME" || CLOUDINARY_UPLOAD_PRESET === "YOUR_UNSIGNED_UPLOAD_PRESET") throw new Error("Media belum dikonfigurasi. Isi Cloudinary di app.js.");
+  if(file.size > maxBytes) throw new Error(`Ukuran file maksimal ${formatBytes(maxBytes)}.`);
+  const form=new FormData(); form.append("file",file); form.append("upload_preset",CLOUDINARY_UPLOAD_PRESET); form.append("folder",folder);
+  const res=await fetch(CLOUDINARY_UPLOAD_URL,{method:"POST",body:form}); const data=await res.json();
+  if(!res.ok || !data.secure_url) throw new Error(data.error?.message||"Upload media gagal.");
+  return {name:file.name,type:file.type||data.resource_type||"application/octet-stream",size:file.size,url:data.secure_url,provider:"cloudinary",publicId:data.public_id||""};
+}
 const emailForUsername = u => `${u.trim().toLowerCase().replace(/[^a-z0-9._-]/g,"_")}@secretforum.local`;
 
 function updateMemberLimitUI(){
@@ -197,7 +206,7 @@ function loadInbox(){
     const unread=docs.filter(d=>d.data().read!==true).length;
     badge?.classList.toggle("hidden",unread===0); if(badge)badge.textContent=unread;
     if(!box)return;
-    box.innerHTML=docs.map(d=>{const r=d.data();return `<div class="inbox-item ${r.read===true?"read":"unread"}"><div><span class="eyebrow">${esc(r.title||"INFORMASI")}</span><h3>${esc(r.subject||"Pesan dari Admin")}</h3><p class="muted">${esc(r.message||"").replace(/\n/g,"<br>")}</p><span class="tiny muted">${r.createdAt?.toDate?.().toLocaleString("id-ID")||"baru saja"}</span></div><div class="inbox-actions">${r.read===true?"":`<button class="secondary" data-read-inbox="${d.id}">Tandai dibaca</button>`}<button class="secondary" data-delete-inbox="${d.id}">Hapus</button></div></div>`}).join("")||`<div class="notice">Belum ada pesan masuk.</div>`;
+    box.innerHTML=docs.map(d=>{const r=d.data(); const a=r.attachment; const media=a?.url&&String(a.type||"").startsWith("image/")?`<div class="inbox-attachment"><a href="${esc(a.url)}" target="_blank" rel="noopener"><img src="${esc(a.url)}" alt="${esc(a.name||"Gambar")}" loading="lazy"></a></div>`:""; return `<div class="inbox-item ${r.read===true?"read":"unread"}"><div><span class="eyebrow">${esc(r.title||"INFORMASI")}</span><h3>${esc(r.subject||"Pesan dari Admin")}</h3><p class="muted">${esc(r.message||"").replace(/\n/g,"<br>")}</p>${media}<span class="tiny muted">${r.createdAt?.toDate?.().toLocaleString("id-ID")||"baru saja"}</span></div><div class="inbox-actions">${r.read===true?"":`<button class="secondary" data-read-inbox="${d.id}">Tandai dibaca</button>`}<button class="secondary" data-delete-inbox="${d.id}">Hapus</button></div></div>`}).join("")||`<div class="notice">Belum ada pesan masuk.</div>`;
     box.querySelectorAll("[data-read-inbox]").forEach(b=>b.onclick=async()=>{try{await updateDoc(doc(db,"inbox",b.dataset.readInbox),{read:true});}catch(e){toast(e.message.replace("Firebase: ",""));}});
     box.querySelectorAll("[data-delete-inbox]").forEach(b=>b.onclick=async()=>{try{await deleteDoc(doc(db,"inbox",b.dataset.deleteInbox));toast("Pesan inbox dihapus.");}catch(e){toast(e.message.replace("Firebase: ",""));}});
   },err=>console.warn("Inbox listener:",err));
@@ -770,21 +779,32 @@ async function sendInboxMessage(usernameId,subjectId,messageId){
 }
 $("adminInboxForm")?.addEventListener("submit",e=>{e.preventDefault();sendInboxMessage("adminInboxUsername","adminInboxSubject","adminInboxMessage")});
 $("authorInboxForm")?.addEventListener("submit",e=>{e.preventDefault();sendInboxMessage("authorInboxUsername","authorInboxSubject","authorInboxMessage")});
-async function broadcastInboxMessage(subject,message){
-  if(!isAuthor())return toast("Hanya Author yang dapat mengirim ke seluruh user.");
-  if(!subject||!message)return toast("Lengkapi judul dan isi pesan.");
+async function broadcastInboxMessage(subject,message,attachment=null,actorLabel="AUTHOR"){
+  if(!canAdmin())return;
+  if(!subject||(!message&&!attachment))return toast("Lengkapi judul dan isi pesan.");
   try{
     const users=await getDocs(collection(db,"users"));
     for(let i=0;i<users.docs.length;i+=450){
       const batch=writeBatch(db);
-      users.docs.slice(i,i+450).forEach(u=>batch.set(doc(collection(db,"inbox")),{uid:u.id,title:"AUTHOR",subject,message,senderId:currentUser.uid,senderRole:"Author",senderName:profile.displayName,read:false,createdAt:serverTimestamp()}));
+      users.docs.slice(i,i+450).forEach(u=>batch.set(doc(collection(db,"inbox")),{uid:u.id,title:actorLabel,subject,message:message||"",...(attachment?{attachment}:{}),senderId:currentUser.uid,senderRole:actorRole(),senderName:profile.displayName,read:false,createdAt:serverTimestamp()}));
       await batch.commit();
     }
-    await logActivity("inbox_broadcast",`Mengirim pesan ke seluruh user: ${subject}`,{subject,recipientCount:users.size});
-    $("authorBroadcastSubject").value=""; $("authorBroadcastMessage").value=""; toast(`Pesan dikirim ke ${users.size} user.`);
-  }catch(e){toast(e.message.replace("Firebase: ",""));}
+    await logActivity("inbox_broadcast",`Mengirim pesan ke seluruh user: ${subject}`,{subject,recipientCount:users.size,hasAttachment:!!attachment});
+    toast(`Pesan dikirim ke ${users.size} user.`); return true;
+  }catch(e){toast(e.message.replace("Firebase: ","")); return false;}
 }
-$("authorBroadcastForm")?.addEventListener("submit",e=>{e.preventDefault();broadcastInboxMessage($("authorBroadcastSubject").value.trim(),$("authorBroadcastMessage").value.trim())});
+async function submitBroadcast(formPrefix){
+  const subject=$(formPrefix+"Subject").value.trim(), message=$(formPrefix+"Message").value.trim(), file=$(formPrefix+"Image")?.files?.[0]||null;
+  if(!subject||(!message&&!file))return toast("Isi judul dan minimal teks atau gambar.");
+  try{
+    const btn=$(formPrefix+"Form")?.querySelector("button[type=submit]"); if(btn){btn.disabled=true;btn.textContent="Mengunggah…";}
+    const attachment=file?await uploadCloudinaryFile(file,`secret-forum/inbox-broadcast/${currentUser.uid}`,10*1024*1024):null;
+    const ok=await broadcastInboxMessage(subject,message,attachment,actorRole().toUpperCase());
+    if(ok){$(formPrefix+"Form").reset();} if(btn){btn.disabled=false;btn.textContent="Kirim ke seluruh user";}
+  }catch(e){toast(e.message.replace("Firebase: ","")); const btn=$(formPrefix+"Form")?.querySelector("button[type=submit]");if(btn){btn.disabled=false;btn.textContent="Kirim ke seluruh user";}}
+}
+$("authorBroadcastForm")?.addEventListener("submit",e=>{e.preventDefault();submitBroadcast("authorBroadcast")});
+$("adminBroadcastForm")?.addEventListener("submit",e=>{e.preventDefault();submitBroadcast("adminBroadcast")});("submit",e=>{e.preventDefault();broadcastInboxMessage($("authorBroadcastSubject").value.trim(),$("authorBroadcastMessage").value.trim())});
 async function renderActivity(container){
   try{
     const s=await getDocs(query(collection(db,"activityLogs"),orderBy("createdAt","desc"),limit(100)));
@@ -853,6 +873,33 @@ $("authorUserSearchForm")?.addEventListener("submit",async e=>{
   }catch(e){toast(e.message.replace("Firebase: ",""));}
 });
 
+async function showRandomAd(){
+  if(!profile || profile.isAdmin || profile.isAuthor) return;
+  try{
+    const snap=await getDocs(query(collection(db,"ads"),where("active","==",true),limit(10)));
+    if(!snap.size)return;
+    const docs=snap.docs; const ad=docs[Math.floor(Math.random()*docs.length)].data();
+    const modal=$("adModal"), img=$("adImage"), title=$("adTitle"), body=$("adBody"), close=$("adClose");
+    if(!modal||!img||!close)return;
+    img.src=ad.imageUrl; img.alt=ad.title||"Iklan"; title.textContent=ad.title||"Iklan"; body.textContent=ad.description||"";
+    const start=Date.now(); close.disabled=true;
+    const tick=()=>{const left=Math.max(0,5000-(Date.now()-start)); close.textContent=left?`Tutup (${Math.ceil(left/1000)}s)`:"Tutup ×"; close.disabled=left>0;if(left)requestAnimationFrame(tick);}; tick();
+    modal.classList.remove("hidden");
+    close.onclick=()=>{modal.classList.add("hidden"); if(ad.linkUrl){window.open(ad.linkUrl,"_blank","noopener");}};
+  }catch(e){console.warn("ad:",e);}
+}
+function scheduleAds(){
+  if(window.adTimer)clearInterval(window.adTimer);
+  if(profile && !profile.isAdmin && !profile.isAuthor){ setTimeout(showRandomAd,2500); window.adTimer=setInterval(showRandomAd,600000); }
+}
+async function publishAd(formId){
+  if(!canAdmin())return; const form=$(formId); if(!form)return; const file=$(formId.replace("Form","Image"))?.files?.[0]; const title=$(formId.replace("Form","Title"))?.value.trim(); const description=$(formId.replace("Form","Description"))?.value.trim(); const linkUrl=$(formId.replace("Form","Link"))?.value.trim();
+  if(!file||!title)return toast("Judul dan gambar iklan wajib diisi.");
+  try{const btn=form.querySelector("button[type=submit]");if(btn){btn.disabled=true;btn.textContent="Mengunggah…";} const attachment=await uploadCloudinaryFile(file,`secret-forum/ads/${currentUser.uid}`,10*1024*1024); const old=await getDocs(query(collection(db,"ads"),where("active","==",true))); for(let i=0;i<old.docs.length;i+=450){const b=writeBatch(db);old.docs.slice(i,i+450).forEach(d=>b.update(d.ref,{active:false,updatedAt:serverTimestamp()}));await b.commit();} await addDoc(collection(db,"ads"),{title,description,linkUrl,imageUrl:attachment.url,imageName:attachment.name,active:true,createdBy:currentUser.uid,createdByRole:actorRole(),createdAt:serverTimestamp()}); await logActivity("ad_published",`Menerbitkan iklan “${title}”`);toast("Iklan berhasil diterbitkan.");form.reset();}catch(e){toast(e.message.replace("Firebase: ",""));}finally{const btn=form.querySelector("button[type=submit]");if(btn){btn.disabled=false;btn.textContent="Terbitkan iklan";}}
+}
+$("adminAdForm")?.addEventListener("submit",e=>{e.preventDefault();publishAd("adminAdForm")});
+$("authorAdForm")?.addEventListener("submit",e=>{e.preventDefault();publishAd("authorAdForm")});
+
 let promoTimer=null;
 function schedulePromo(){clearInterval(promoTimer);promoTimer=setInterval(()=>{if(profile&&!($("promo").classList.contains("hidden")))return;if(profile&&!profile.isAdmin&&!profile.isAuthor){$("promo").classList.remove("hidden");setTimeout(()=>$("promo").classList.add("hidden"),5000)}},600000)}
 $("promoClose").onclick=()=>$("promo").classList.add("hidden");
@@ -861,6 +908,6 @@ $("promoMonthly").onclick=()=>showPage("contact");
 
 onAuthStateChanged(auth,async user=>{
   currentUser=user;
-  if(!user){ profile=null; activeForum=null; if(unsubscribeMessages)unsubscribeMessages(); if(unsubscribeProfile)unsubscribeProfile(); if(unsubscribeActivations)unsubscribeActivations(); if(unsubscribeInbox)unsubscribeInbox(); unsubscribeMessages=unsubscribeProfile=unsubscribeActivations=unsubscribeInbox=null; if(promoTimer){clearInterval(promoTimer); promoTimer=null;} $("promo")?.classList.add("hidden"); }
-  if(user){try{await loadProfile(user);schedulePromo()}catch(e){toast(e.message)}}else{$("appView").classList.add("hidden");$("authView").classList.remove("hidden");}
+  if(!user){ profile=null; activeForum=null; if(unsubscribeMessages)unsubscribeMessages(); if(unsubscribeProfile)unsubscribeProfile(); if(unsubscribeActivations)unsubscribeActivations(); if(unsubscribeInbox)unsubscribeInbox(); unsubscribeMessages=unsubscribeProfile=unsubscribeActivations=unsubscribeInbox=null; if(promoTimer){clearInterval(promoTimer); promoTimer=null;} if(window.adTimer){clearInterval(window.adTimer);window.adTimer=null;} $("promo")?.classList.add("hidden"); $("adModal")?.classList.add("hidden"); }
+  if(user){try{await loadProfile(user);schedulePromo();scheduleAds()}catch(e){toast(e.message)}}else{$("appView").classList.add("hidden");$("authView").classList.remove("hidden");}
 });

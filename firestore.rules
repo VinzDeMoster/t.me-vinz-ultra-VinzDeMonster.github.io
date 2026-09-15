@@ -112,6 +112,12 @@ service cloud.firestore {
       allow delete: if privileged();
     }
 
+    match /ads/{adId} {
+      allow read: if privileged() || (activeUser() && resource.data.get("active", false) == true);
+      allow create: if privileged() && request.resource.data.title is string && request.resource.data.imageUrl is string && request.resource.data.active is bool;
+      allow update, delete: if privileged();
+    }
+
     match /activityLogs/{logId} {
       allow read: if privileged();
       allow create: if allowedUser() && request.resource.data.actorId == request.auth.uid && request.resource.data.message is string && request.resource.data.actorRole is string;

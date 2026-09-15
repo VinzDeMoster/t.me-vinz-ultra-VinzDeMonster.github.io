@@ -51,3 +51,12 @@ textarea{width:100%;resize:none;min-height:42px;max-height:150px;overflow-y:auto
 
 /* v21: WhatsApp-style attachment button beside Send */
 .composer{display:flex;align-items:flex-end;gap:8px}.composer-main{flex:1;min-width:0}.composer-actions{display:flex;align-items:flex-end;gap:7px;flex:0 0 auto}.composer-actions .send-btn{height:40px;white-space:nowrap}.composer-meta{min-height:18px;display:flex;align-items:center;gap:8px;overflow:hidden}.composer-meta #attachmentName{max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.attach-btn{width:40px;height:40px;border-radius:12px}.attach-btn input{display:none}@media(max-width:600px){.composer-actions{gap:5px}.composer-actions .send-btn{padding-left:12px;padding-right:12px}.attach-btn{width:38px;height:38px}.composer-meta #attachmentName{max-width:150px}}
+
+/* v22: broadcast images + image advertisements */
+.file-pick{display:flex;align-items:center;gap:8px;padding:11px 13px;border:1px dashed var(--line);border-radius:12px;background:rgba(255,255,255,.035);cursor:pointer;font-weight:700}
+.file-pick:hover{background:rgba(255,255,255,.07)}
+.ad-modal{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;padding:18px;background:rgba(0,0,0,.72);backdrop-filter:blur(8px)}
+.ad-card{width:min(440px,94vw);max-height:88vh;overflow:auto;border:1px solid rgba(255,255,255,.14);border-radius:22px;background:#0c1423;box-shadow:0 25px 80px rgba(0,0,0,.55);padding:14px}
+.ad-top{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}.ad-close{border:1px solid var(--line);background:rgba(255,255,255,.06);color:#fff;border-radius:10px;padding:7px 10px;font-size:11px;font-weight:800}.ad-close:disabled{opacity:.5;cursor:not-allowed}.ad-image{display:block;width:100%;max-height:58vh;object-fit:contain;border-radius:16px;background:#070c16}.ad-content{padding:12px 4px 4px}.ad-content h3{margin:0 0 5px}.ad-content p{margin:0;white-space:pre-wrap;line-height:1.5}
+
+.inbox-attachment{margin-top:10px}.inbox-attachment img{display:block;width:min(360px,100%);max-height:360px;object-fit:cover;border-radius:12px;border:1px solid var(--line)}
