@@ -17,3 +17,19 @@ Deploy semua file aplikasi dan **firestore.rules** dari ZIP ini.
 
 
 Premium pricing: 1 minggu Rp1.000, 1 bulan Rp2.000, 1 tahun Rp4.000. Untuk QRIS, ganti area placeholder pembayaran dengan gambar QRIS milikmu (misalnya file qris.png) dan referensikan file tersebut dari index.html. Jangan masukkan data pembayaran sensitif ke Firestore client-side.
+
+
+## Media upload (Cloudinary Free)
+Versi ini memakai Cloudinary untuk foto/video/file agar tidak memakai Firebase Storage. Cloudinary Free tidak memerlukan kartu kredit dan saat ini memberi 25 credits/bulan; batas file Free yang perlu diperhatikan: image 10 MB, video 100 MB, raw file 10 MB.
+
+### Setup sekali
+1. Buat akun gratis Cloudinary.
+2. Buka Settings -> Upload Presets -> Add upload preset.
+3. Jadikan preset **Unsigned**.
+4. Salin **Cloud Name** dan nama upload preset.
+5. Buka `app.js`, lalu ubah:
+   - `CLOUDINARY_CLOUD_NAME = "YOUR_CLOUD_NAME"`
+   - `CLOUDINARY_UPLOAD_PRESET = "YOUR_UNSIGNED_UPLOAD_PRESET"`
+6. Upload/deploy ulang website.
+
+Upload dilakukan langsung dari browser ke Cloudinary. Jangan memasukkan API Secret Cloudinary ke `app.js`.

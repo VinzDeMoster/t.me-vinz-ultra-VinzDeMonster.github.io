@@ -1,7 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updatePassword } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, collection, collectionGroup, query, where, orderBy, onSnapshot, getDocs, serverTimestamp, runTransaction, limit, deleteDoc, writeBatch } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
-import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-storage.js";
 
 /*
   1) Buat Firebase project.
@@ -22,8 +21,12 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const storage = getStorage(app);
 
+// Media uploads use Cloudinary Free instead of Firebase Storage.
+// Create an UNSIGNED upload preset in Cloudinary and put your values here.
+const CLOUDINARY_CLOUD_NAME = "pyuohspq";
+const CLOUDINARY_UPLOAD_PRESET = "ml_default";
+const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`;
 const $ = id => document.getElementById(id);
 let currentUser = null, profile = null, activeForum = null, unsubscribeMessages = null, unsubscribeProfile = null, unsubscribeActivations = null, unsubscribeInbox = null, authMode = "login";
 const messageTextCache = new Map();
@@ -416,9 +419,9 @@ function openForum(id,data){
       if(!confirm("Hapus pesan ini?"))return;
       try{
         const messageSnap=await getDoc(doc(db,"forums",activeForum.id,"messages",btn.dataset.deleteMessage));
-        const attachment=messageSnap.exists()?messageSnap.data().attachment:null;
         await deleteDoc(doc(db,"forums",activeForum.id,"messages",btn.dataset.deleteMessage));
-        if(attachment?.path){try{await deleteObject(storageRef(storage,attachment.path));}catch(e){console.warn("attachment cleanup:",e);}}
+        // Media berada di Cloudinary. Penghapusan pesan tidak menghapus asset Cloudinary
+        // karena penghapusan asset memerlukan API secret/server-side authentication.
         toast("Pesan dihapus.");
       }catch(err){toast(err.message.replace("Firebase: ",""));}
     });
@@ -529,11 +532,20 @@ $("messageForm").onsubmit=async e=>{
     let attachment=null;
     if(file){
       const safeName=file.name.replace(/[^a-zA-Z0-9._-]/g,"_").slice(0,120);
-      const path=`forums/${activeForum.id}/messages/${currentUser.uid}/${Date.now()}_${crypto.randomUUID()}_${safeName}`;
-      const fileRef=storageRef(storage,path);
-      await uploadBytes(fileRef,file,{contentType:file.type||"application/octet-stream",customMetadata:{uid:currentUser.uid,forumId:activeForum.id}});
-      const url=await getDownloadURL(fileRef);
-      attachment={name:file.name,type:file.type||"application/octet-stream",size:file.size,path,url};
+      if(CLOUDINARY_CLOUD_NAME === "YOUR_CLOUD_NAME" || CLOUDINARY_UPLOAD_PRESET === "YOUR_UNSIGNED_UPLOAD_PRESET") {
+        throw new Error("Media belum dikonfigurasi. Isi CLOUDINARY_CLOUD_NAME dan CLOUDINARY_UPLOAD_PRESET di app.js.");
+      }
+      const isImage=(file.type||"").startsWith("image/");
+      const maxForType=isImage?10*1024*1024:((file.type||"").startsWith("video/")?100*1024*1024:10*1024*1024);
+      if(file.size>maxForType) throw new Error(isImage?"Foto maksimal 10 MB pada paket Cloudinary Free.":((file.type||"").startsWith("video/")?"Video maksimal 100 MB pada paket Cloudinary Free.":"File maksimal 10 MB pada paket Cloudinary Free."));
+      const form=new FormData();
+      form.append("file",file);
+      form.append("upload_preset",CLOUDINARY_UPLOAD_PRESET);
+      form.append("folder",`secret-forum/${activeForum.id}/${currentUser.uid}`);
+      const uploadRes=await fetch(CLOUDINARY_UPLOAD_URL,{method:"POST",body:form});
+      const uploadData=await uploadRes.json();
+      if(!uploadRes.ok || !uploadData.secure_url) throw new Error(uploadData.error?.message||"Upload media gagal.");
+      attachment={name:file.name,type:file.type||uploadData.resource_type||"application/octet-stream",size:file.size,url:uploadData.secure_url,provider:"cloudinary",publicId:uploadData.public_id||""};
     }
     await addDoc(collection(db,"forums",activeForum.id,"messages"),{uid:currentUser.uid,displayName:profile.displayName,isAdmin:profile.isAdmin===true,isAuthor:profile.isAuthor===true,premiumPurchases:Number(profile.premiumPurchases||0),text:text.slice(0,MAX_MESSAGE_LENGTH),...(attachment?{attachment}:{}),createdAt:serverTimestamp()});
     logActivity("message_sent",`Mengirim pesan di forum “${activeForum.name||"Forum"}` ,{forumId:activeForum.id,forumName:activeForum.name||"Forum"}).catch(()=>{});
