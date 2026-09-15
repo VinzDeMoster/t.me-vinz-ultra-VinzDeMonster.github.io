@@ -23,15 +23,11 @@ service cloud.firestore {
       return exists(/databases/$(database)/documents/admins/$(uid)) &&
         get(/databases/$(database)/documents/admins/$(uid)).data.get("enabled", false) == true;
     }
-    function suspensionExpired(value) {
-      return value == null ||
-        (value is timestamp && value <= request.time) ||
-        (value is number && value <= request.time.toMillis());
-    }
     function activeUser() {
       return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get("banned", false) != true &&
-        suspensionExpired(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get("suspendedUntil", null));
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get("suspendedUntil", null) == null ||
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get("suspendedUntil", null) <= request.time);
     }
     function allowedUser() { return privileged() || activeUser(); }
     function premiumActive() {
@@ -43,7 +39,8 @@ service cloud.firestore {
     }
     function forumAvailable(forumId) {
       let f = get(/databases/$(database)/documents/forums/$(forumId)).data;
-      return f.get("banned", false) != true && suspensionExpired(f.get("suspendedUntil", null));
+      return f.get("banned", false) != true &&
+        (f.get("suspendedUntil", null) == null || f.get("suspendedUntil", null) <= request.time);
     }
     function forumOwner(forumId) {
       return activeUser() && get(/databases/$(database)/documents/forums/$(forumId)).data.ownerId == request.auth.uid;
@@ -139,28 +136,6 @@ service cloud.firestore {
       allow create, update, delete: if privileged() && request.resource.data.get("imageUrl", "") is string;
     }
 
-    match /botLicenses/{code} {
-      allow read: if privileged() || (activeUser() && resource.data.uid == request.auth.uid);
-      allow create: if privileged() &&
-        request.resource.id.size() == 20 &&
-        request.resource.data.uid is string &&
-        request.resource.data.days is int &&
-        request.resource.data.maxForums is int &&
-        request.resource.data.maxForums >= 20 &&
-        request.resource.data.usedForums is list &&
-        request.resource.data.usedForums.size() == 0;
-      allow update: if privileged() ||
-        (activeUser() &&
-         resource.data.uid == request.auth.uid &&
-         request.resource.data.uid == resource.data.uid &&
-         request.resource.data.days == resource.data.days &&
-         request.resource.data.maxForums == resource.data.maxForums &&
-         request.resource.data.usedForums is list &&
-         request.resource.data.usedForums.size() == resource.data.usedForums.size() + 1 &&
-         request.resource.data.usedForums.hasAll(resource.data.usedForums));
-      allow delete: if privileged();
-    }
-
     match /activityLogs/{logId} {
       allow read: if privileged();
       allow create: if allowedUser() && request.resource.data.actorId == request.auth.uid && request.resource.data.message is string && request.resource.data.actorRole is string;
@@ -217,20 +192,6 @@ service cloud.firestore {
         request.resource.data.memberIds.size() == resource.data.memberIds.size() + 1 &&
         request.resource.data.memberIds.hasAll(resource.data.memberIds) &&
         request.resource.data.memberIds.size() <= resource.data.maxMembers;
-
-      allow update: if forumOwner(forumId) &&
-        request.resource.data.ownerId == resource.data.ownerId &&
-        request.resource.data.name == resource.data.name &&
-        request.resource.data.maxMembers == resource.data.maxMembers &&
-        request.resource.data.secretCode == resource.data.secretCode &&
-        request.resource.data.createdAt == resource.data.createdAt &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['botCare']) &&
-        request.resource.data.get('botCare', null) is map &&
-        request.resource.data.get('botCare', {}).get('licenseCode', '') is string &&
-        request.resource.data.get('botCare', {}).get('licenseCode', '').size() == 20 &&
-        exists(/databases/$(database)/documents/botLicenses/$(request.resource.data.get('botCare', {}).get('licenseCode', ''))) &&
-        getAfter(/databases/$(database)/documents/botLicenses/$(request.resource.data.get('botCare', {}).get('licenseCode', ''))).data.uid == request.auth.uid &&
-        getAfter(/databases/$(database)/documents/botLicenses/$(request.resource.data.get('botCare', {}).get('licenseCode', ''))).data.usedForums.hasAll([forumId]);
 
       allow delete: if author();
 
