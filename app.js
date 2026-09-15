@@ -592,7 +592,7 @@ $("messageInput").addEventListener("input",()=>{
 });
 
 let selectedPremiumPlan=null;
-const PREMIUM_PRICES={"1 minggu":10.000,"1 bulan":299.000,"1 tahun":710.000};
+const PREMIUM_PRICES={"1 minggu":78.000,"1 bulan":299.000,"1 tahun":710.000};
 document.querySelectorAll("[data-buy-plan]").forEach(btn=>btn.onclick=()=>{
   selectedPremiumPlan=btn.dataset.buyPlan;
   $("paymentPlanText").textContent=`Paket yang dipilih: Premium ${selectedPremiumPlan} • Rp${(PREMIUM_PRICES[selectedPremiumPlan]||0).toLocaleString("id-ID")}.`;
