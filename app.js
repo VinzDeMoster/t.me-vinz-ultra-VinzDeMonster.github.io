@@ -25,7 +25,7 @@ const db = getFirestore(app);
 // Media uploads use Cloudinary Free instead of Firebase Storage.
 // Create an UNSIGNED upload preset in Cloudinary and put your values here.
 const CLOUDINARY_CLOUD_NAME = "pyuohspq";
-const CLOUDINARY_UPLOAD_PRESET = "ml_default";
+const CLOUDINARY_UPLOAD_PRESET = "secret_forum_upload";
 const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`;
 const $ = id => document.getElementById(id);
 let currentUser = null, profile = null, activeForum = null, unsubscribeMessages = null, unsubscribeProfile = null, unsubscribeActivations = null, unsubscribeInbox = null, authMode = "login";
