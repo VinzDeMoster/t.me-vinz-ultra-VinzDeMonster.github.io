@@ -1,6 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updatePassword } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, collection, collectionGroup, query, where, orderBy, onSnapshot, getDocs, serverTimestamp, runTransaction, limit, deleteDoc, writeBatch } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-storage.js";
 
 /*
   1) Buat Firebase project.
@@ -21,9 +22,11 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+const storage = getStorage(app);
 
 const $ = id => document.getElementById(id);
 let currentUser = null, profile = null, activeForum = null, unsubscribeMessages = null, unsubscribeProfile = null, unsubscribeActivations = null, unsubscribeInbox = null, authMode = "login";
+const messageTextCache = new Map();
 // Website creator / Author. Securely configure this UID, or create authors/{UID} with enabled:true in Firestore.
 const AUTHOR_UID = "Lt8kkzctunb1lXA1rGxz1xXuYlv2";
 const isAuthor = () => !!profile?.isAuthor;
@@ -376,34 +379,66 @@ function openForum(id,data){
   const q=query(collection(db,"forums",id,"messages"),orderBy("createdAt","asc"));
   unsubscribeMessages=onSnapshot(q,s=>{
     const box=$("messages");
+    messageTextCache.clear();
     box.innerHTML=s.docs.map(d=>{
       const m=d.data(), me=m.uid===currentUser.uid, canDelete=me||canAdmin();
+      messageTextCache.set(d.id, m.text||"");
       const authorBadge=m.isAuthor?roleBadgeHTML("author"):"";
       const verified=m.isAdmin?'<span class="verified" title="Admin terverifikasi" aria-label="Admin terverifikasi"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.2 16.7 4.8 12.3l-1.9-1.9 6.3 6.3L21.2 8.5l-1.9-1.9z"/></svg></span>':'';
       const premiumBadge=premiumBadgeHTML(premiumBadgeLevel(m.premiumPurchases));
       const deleteButton=canDelete?`<button class="msg-delete" data-delete-message="${d.id}" title="Hapus pesan" aria-label="Hapus pesan">🗑</button>`:"";
-      const translateButton=canUsePremium()?`<button class="msg-translate" data-translate-message="${d.id}">✦ Terjemahkan</button>`:"";
-      return `<div class="msg ${me?"me":""}" data-original-text="${esc(m.text)}"><div class="msg-head"><div class="msg-name">${esc(m.displayName||"User")} ${authorBadge} ${verified} ${premiumBadge}</div>${deleteButton}</div><div class="msg-text">${esc(m.text).replace(/\n/g,"<br>")}</div><div class="msg-tools">${translateButton}</div><div class="msg-time">${m.createdAt?.toDate?.().toLocaleString("id-ID")||"baru saja"}</div></div>`;
-    }).join("");
+      const translateButton=canUsePremium()?`<button class="msg-translate" data-translate-message="${d.id}">✦ Terjemahkan sandi</button>`:"";
+      const text=String(m.text||"");
+      const isLong=text.length>1200;
+      const preview=isLong?text.slice(0,1200):text;
+      let attachmentHTML="";
+      const a=m.attachment;
+      if(a?.url){
+        const type=String(a.type||"");
+        if(type.startsWith("image/")) attachmentHTML=`<div class="msg-attachment image-attachment"><a href="${esc(a.url)}" target="_blank" rel="noopener"><img src="${esc(a.url)}" alt="${esc(a.name||"Foto")}" loading="lazy"></a></div>`;
+        else if(type.startsWith("video/")) attachmentHTML=`<div class="msg-attachment video-attachment"><video controls preload="metadata" src="${esc(a.url)}"></video></div>`;
+        else attachmentHTML=`<div class="msg-attachment file-attachment"><span>📎</span><a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.name||"Unduh file")}</a><span class="tiny muted">${a.size?formatBytes(a.size):""}</span></div>`;
+      }
+      return `<div class="msg ${me?"me":""}" data-message-id="${d.id}"><div class="msg-head"><div class="msg-name">${esc(m.displayName||"User")} ${authorBadge} ${verified} ${premiumBadge}</div>${deleteButton}</div><div class="msg-text ${isLong?"collapsed":""}" data-preview-text="${esc(preview)}">${esc(preview).replace(/\n/g,"<br>")}</div>${isLong?`<button class="read-more" data-read-more="${d.id}">Baca selengkapnya</button>`:""}${attachmentHTML}<div class="msg-tools">${translateButton}</div><div class="msg-time">${m.createdAt?.toDate?.().toLocaleString("id-ID")||"baru saja"}</div></div>`;
+    }).join("") || '<div class="notice">Belum ada pesan.</div>';
+    box.querySelectorAll("[data-read-more]").forEach(btn=>btn.onclick=()=>{
+      const msgEl=btn.closest(".msg")?.querySelector(".msg-text");
+      const full=messageTextCache.get(btn.dataset.readMore)||"";
+      if(!msgEl)return;
+      const expanded=btn.dataset.expanded==="true";
+      msgEl.innerHTML=esc(expanded?full:full.slice(0,1200)).replace(/\n/g,"<br>");
+      msgEl.classList.toggle("collapsed",!expanded);
+      btn.dataset.expanded=expanded?"false":"true";
+      btn.textContent=expanded?"Baca selengkapnya":"Sembunyikan";
+    });
     box.querySelectorAll("[data-delete-message]").forEach(btn=>btn.onclick=async()=>{
       if(!activeForum)return;
       if(!confirm("Hapus pesan ini?"))return;
-      try{await deleteDoc(doc(db,"forums",activeForum.id,"messages",btn.dataset.deleteMessage));toast("Pesan dihapus.");}
-      catch(err){toast(err.message.replace("Firebase: ",""));}
+      try{
+        const messageSnap=await getDoc(doc(db,"forums",activeForum.id,"messages",btn.dataset.deleteMessage));
+        const attachment=messageSnap.exists()?messageSnap.data().attachment:null;
+        await deleteDoc(doc(db,"forums",activeForum.id,"messages",btn.dataset.deleteMessage));
+        if(attachment?.path){try{await deleteObject(storageRef(storage,attachment.path));}catch(e){console.warn("attachment cleanup:",e);}}
+        toast("Pesan dihapus.");
+      }catch(err){toast(err.message.replace("Firebase: ",""));}
     });
     box.querySelectorAll("[data-translate-message]").forEach(btn=>btn.onclick=async()=>{
       const msgEl=btn.closest(".msg")?.querySelector(".msg-text");
       if(!msgEl)return;
+      const id=btn.dataset.translateMessage;
       if(btn.dataset.translated === "true"){
-        msgEl.innerHTML=esc(btn.dataset.original || "").replace(/\n/g,"<br>");
+        const original=messageTextCache.get(id)||"";
+        msgEl.innerHTML=esc(original.length>1200?original.slice(0,1200):original).replace(/\n/g,"<br>");
+        msgEl.classList.toggle("collapsed",original.length>1200);
         btn.dataset.translated="false"; btn.textContent="✦ Terjemahkan sandi";
         return;
       }
-      const original=btn.closest(".msg")?.dataset.originalText || "";
+      const original=messageTextCache.get(id)||"";
       if(!original)return toast("Pesan tidak ditemukan.");
       const result=decodeSecret(original,"auto");
-      if(result.startsWith("Sandi belum dikenali"))return toast("Sandi belum dikenali. Pilih jenis sandi manual di alat Premium.");
-      btn.dataset.original=original; btn.dataset.translated="true";
+      if(result.startsWith("Sandi belum dikenali"))return toast("Sandi belum dikenali. Gunakan format Morse, angka, rumus, biner/hex/Base64/URL/ROT13.");
+      btn.dataset.translated="true";
+      msgEl.classList.remove("collapsed");
       msgEl.innerHTML=esc(result).replace(/\n/g,"<br>");
       btn.textContent="↩ Kembalikan sandi";
     });
@@ -475,20 +510,40 @@ function decodeSecret(v,type){
   try{const normalized=x.replace(/-/g,"+").replace(/_/g,"/").replace(/\s/g,"");if(/^[A-Za-z0-9+/]+={0,2}$/.test(normalized)&&normalized.length>=4&&normalized.length%4===0){const out=atob(normalized);if(out && /[\x20-\x7E]/.test(out))return out;}}catch(e){}
   return "Sandi belum dikenali. Pilih jenis sandi secara manual.";
 }
+function formatBytes(bytes){const n=Number(bytes||0);if(!n)return "";if(n<1024)return n+" B";if(n<1024*1024)return (n/1024).toFixed(1)+" KB";if(n<1024*1024*1024)return (n/1024/1024).toFixed(1)+" MB";return (n/1024/1024/1024).toFixed(1)+" GB";}
+const MAX_MESSAGE_LENGTH=100000;
+const MAX_ATTACHMENT_SIZE=100*1024*1024;
+function setAttachmentLabel(){const f=$("messageAttachment")?.files?.[0];const label=$("attachmentName");if(label)label.textContent=f?`${f.name} • ${formatBytes(f.size)}`:"";}
+$("messageAttachment")?.addEventListener("change",setAttachmentLabel);
 $("messageForm").onsubmit=async e=>{
   e.preventDefault();
-  const input=$("messageInput"),text=input.value.trim();
-  if(!text||!activeForum)return;
+  const input=$("messageInput"), fileInput=$("messageAttachment"), text=input.value.trim(), file=fileInput?.files?.[0]||null;
+  if(!activeForum)return;
   if(activeForum.ownerOnly===true && activeForum.ownerId!==currentUser.uid && !canAdmin())return toast("Hanya owner yang dapat mengirim pesan.");
+  if(!text && !file)return;
+  if(text.length>MAX_MESSAGE_LENGTH)return toast("Pesan terlalu panjang. Maksimal 100.000 karakter.");
+  if(file && file.size>MAX_ATTACHMENT_SIZE)return toast("Ukuran file maksimal 100 MB.");
+  const sendBtn=$("messageForm").querySelector("button[type=submit]");
+  if(sendBtn){sendBtn.disabled=true;sendBtn.textContent=file?"Mengunggah…":"Mengirim…";}
   try{
-    await addDoc(collection(db,"forums",activeForum.id,"messages"),{uid:currentUser.uid,displayName:profile.displayName,isAdmin:profile.isAdmin===true,isAuthor:profile.isAuthor===true,premiumPurchases:Number(profile.premiumPurchases||0),text:text.slice(0,1000),createdAt:serverTimestamp()});
-    // Activity logging must never make a successfully sent message look like it failed.
-    logActivity("message_sent",`Mengirim pesan di forum “${activeForum.name||"Forum"}”`,{forumId:activeForum.id,forumName:activeForum.name||"Forum"}).catch(()=>{});
-    input.value=""; input.style.height="auto";
+    let attachment=null;
+    if(file){
+      const safeName=file.name.replace(/[^a-zA-Z0-9._-]/g,"_").slice(0,120);
+      const path=`forums/${activeForum.id}/messages/${currentUser.uid}/${Date.now()}_${crypto.randomUUID()}_${safeName}`;
+      const fileRef=storageRef(storage,path);
+      await uploadBytes(fileRef,file,{contentType:file.type||"application/octet-stream",customMetadata:{uid:currentUser.uid,forumId:activeForum.id}});
+      const url=await getDownloadURL(fileRef);
+      attachment={name:file.name,type:file.type||"application/octet-stream",size:file.size,path,url};
+    }
+    await addDoc(collection(db,"forums",activeForum.id,"messages"),{uid:currentUser.uid,displayName:profile.displayName,isAdmin:profile.isAdmin===true,isAuthor:profile.isAuthor===true,premiumPurchases:Number(profile.premiumPurchases||0),text:text.slice(0,MAX_MESSAGE_LENGTH),...(attachment?{attachment}:{}),createdAt:serverTimestamp()});
+    logActivity("message_sent",`Mengirim pesan di forum “${activeForum.name||"Forum"}` ,{forumId:activeForum.id,forumName:activeForum.name||"Forum"}).catch(()=>{});
+    input.value=""; input.style.height="auto"; if(fileInput){fileInput.value="";setAttachmentLabel();}
   }catch(err){toast(err.message.replace("Firebase: ",""));}
+  finally{if(sendBtn){sendBtn.disabled=false;sendBtn.textContent="Kirim";}}
 };
 $("messageInput").addEventListener("input",()=>{
-  const el=$("messageInput"); el.style.height="auto"; el.style.height=Math.min(el.scrollHeight,150)+"px";
+  const el=$("messageInput"); el.style.height="auto"; el.style.height=Math.min(el.scrollHeight,180)+"px";
+  const count=$("messageCount"); if(count)count.textContent=`${el.value.length.toLocaleString("id-ID")}/100.000`;
 });
 
 let selectedPremiumPlan=null;

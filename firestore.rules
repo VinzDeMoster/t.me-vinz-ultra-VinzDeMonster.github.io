@@ -183,7 +183,12 @@ service cloud.firestore {
       match /messages/{messageId} {
         allow read: if privileged() || (activeUser() && forumAvailable(forumId) && request.auth.uid in get(/databases/$(database)/documents/forums/$(forumId)).data.get('memberIds', []));
         allow create: if request.resource.data.uid == request.auth.uid &&
-        request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 1000 &&
+        request.resource.data.text is string && request.resource.data.text.size() <= 100000 &&
+        (request.resource.data.text.size() > 0 || request.resource.data.get('attachment', null) is map) &&
+        (!request.resource.data.get('attachment', null) is map ||
+          (request.resource.data.attachment.get('name','') is string && request.resource.data.attachment.get('type','') is string &&
+           request.resource.data.attachment.get('size',0) is int && request.resource.data.attachment.get('size',0) <= 104857600 &&
+           request.resource.data.attachment.get('path','') is string && request.resource.data.attachment.get('url','') is string)) &&
         request.resource.data.get('isAdmin', false) == admin() &&
         request.resource.data.get('isAuthor', false) == author() &&
         request.resource.data.premiumPurchases == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('premiumPurchases',0) &&

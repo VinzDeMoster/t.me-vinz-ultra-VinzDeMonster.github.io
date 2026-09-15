@@ -194,7 +194,7 @@
           <button id="leaveForumBtn" class="secondary wide" type="button">Keluar forum</button>
         </div>
         <div id="messages" class="messages glass"></div>
-        <form id="messageForm" class="composer glass"><textarea id="messageInput" maxlength="1000" rows="1" placeholder="Tulis pesan teks..." autocomplete="off"></textarea><button class="primary">Kirim</button></form>
+        <form id="messageForm" class="composer glass"><div class="composer-main"><textarea id="messageInput" maxlength="100000" rows="1" placeholder="Tulis pesan..." autocomplete="off"></textarea><div class="composer-meta"><span id="messageCount" class="tiny muted">0/100.000</span><label class="attach-btn" title="Kirim foto, video, atau file">📎<input id="messageAttachment" type="file" hidden></label><span id="attachmentName" class="tiny muted"></span></div></div><button class="primary" type="submit">Kirim</button></form>
       </section>
     </main>
   </div>

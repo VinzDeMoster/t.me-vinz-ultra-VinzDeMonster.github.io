@@ -1,0 +1,30 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() { return request.auth != null; }
+    function admin() {
+      return signedIn() && exists(/databases/(default)/documents/admins/$(request.auth.uid)) &&
+        get(/databases/(default)/documents/admins/$(request.auth.uid)).data.get('enabled', false) == true;
+    }
+    function author() {
+      return signedIn() && exists(/databases/(default)/documents/authors/$(request.auth.uid)) &&
+        get(/databases/(default)/documents/authors/$(request.auth.uid)).data.get('enabled', false) == true;
+    }
+    function privileged() { return admin() || author(); }
+    function activeUser() {
+      return signedIn() && exists(/databases/(default)/documents/users/$(request.auth.uid)) &&
+        get(/databases/(default)/documents/users/$(request.auth.uid)).data.get('banned', false) != true;
+    }
+    match /forums/{forumId}/messages/{uid}/{fileName} {
+      allow read: if privileged() || (activeUser() &&
+        exists(/databases/(default)/documents/forums/$(forumId)) &&
+        request.auth.uid in get(/databases/(default)/documents/forums/$(forumId)).data.get('memberIds', []));
+      allow create: if privileged() || (activeUser() && uid == request.auth.uid &&
+        exists(/databases/(default)/documents/forums/$(forumId)) &&
+        request.auth.uid in get(/databases/(default)/documents/forums/$(forumId)).data.get('memberIds', []) &&
+        request.resource.size <= 104857600);
+      allow delete: if privileged() || (activeUser() && uid == request.auth.uid);
+      allow update: if false;
+    }
+  }
+}

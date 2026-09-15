@@ -43,3 +43,7 @@ textarea{width:100%;resize:none;min-height:42px;max-height:150px;overflow-y:auto
 .user-monitor-grid small{display:block;color:var(--muted);font-size:9px;margin-bottom:4px}
 .user-monitor-grid b{font-size:11px;overflow-wrap:anywhere}
 @media(max-width:640px){.user-monitor-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+
+/* v20: long messages and attachments */
+.composer{align-items:flex-end}.composer-main{flex:1;min-width:0}.composer-meta{display:flex;align-items:center;gap:8px;min-height:22px;padding:0 4px}.attach-btn{display:inline-grid;place-items:center;width:30px;height:30px;margin:0;border-radius:9px;background:#172239;border:1px solid var(--line);cursor:pointer;font-size:15px}.attach-btn:hover{background:#21304a}.msg-text.collapsed{max-height:none}.read-more{display:inline-block;margin-top:6px;padding:4px 0;border:0;background:transparent;color:#9eb0ff;font-size:11px;font-weight:700}.read-more:hover{text-decoration:underline}.msg-attachment{margin-top:9px}.image-attachment img{display:block;width:min(360px,100%);max-height:420px;object-fit:cover;border-radius:12px}.video-attachment video{display:block;width:min(420px,100%);max-height:420px;border-radius:12px;background:#000}.file-attachment{display:flex;align-items:center;gap:8px;padding:10px 11px;border:1px solid var(--line);border-radius:11px;background:rgba(8,14,26,.45);overflow-wrap:anywhere}.file-attachment a{color:#b9c8ff;font-weight:700;text-decoration:none}.file-attachment a:hover{text-decoration:underline}
