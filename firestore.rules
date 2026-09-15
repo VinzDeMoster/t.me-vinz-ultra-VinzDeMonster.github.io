@@ -47,7 +47,7 @@ service cloud.firestore {
     }
 
     match /authors/{uid} {
-      allow read: if privileged() || self(uid);
+      allow read: if self(uid) || privileged();
       allow create, update, delete: if author();
     }
 
@@ -74,14 +74,15 @@ service cloud.firestore {
          request.resource.data.isAdmin == resource.data.isAdmin &&
          request.resource.data.banned == resource.data.banned &&
          request.resource.data.suspendedUntil == resource.data.suspendedUntil &&
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['premiumUntil','premiumPurchases','lastActivationCode']) &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['premiumUntil','premiumUnlimited','premiumPurchases','lastActivationCode']) &&
          request.resource.data.lastActivationCode is string &&
          request.resource.data.lastActivationCode.size() == 20 &&
          exists(/databases/$(database)/documents/premiumActivations/$(request.resource.data.lastActivationCode)) &&
          get(/databases/$(database)/documents/premiumActivations/$(request.resource.data.lastActivationCode)).data.uid == request.auth.uid &&
          get(/databases/$(database)/documents/premiumActivations/$(request.resource.data.lastActivationCode)).data.get('used',false) == false &&
          getAfter(/databases/$(database)/documents/premiumActivations/$(request.resource.data.lastActivationCode)).data.get('used',false) == true &&
-         request.resource.data.premiumUntil == get(/databases/$(database)/documents/premiumActivations/$(request.resource.data.lastActivationCode)).data.premiumUntil &&
+         request.resource.data.premiumUntil == get(/databases/$(database)/documents/premiumActivations/$(request.resource.data.lastActivationCode)).data.get('premiumUntil', null) &&
+         request.resource.data.premiumUnlimited == get(/databases/$(database)/documents/premiumActivations/$(request.resource.data.lastActivationCode)).data.get('unlimited', false) &&
          request.resource.data.premiumPurchases == resource.data.get('premiumPurchases',0) + 1);
       allow delete: if author() || admin();
     }
@@ -106,7 +107,7 @@ service cloud.firestore {
 
     match /premiumActivations/{code} {
       allow read: if privileged() || (activeUser() && resource.data.uid == request.auth.uid);
-      allow create: if privileged() && request.resource.id.size() == 20 && request.resource.data.uid is string && request.resource.data.plan is string && request.resource.data.days is int && request.resource.data.days > 0 && request.resource.data.used == false;
+      allow create: if privileged() && request.resource.id.size() == 20 && request.resource.data.uid is string && request.resource.data.plan is string && request.resource.data.days is int && request.resource.data.days >= 0 && request.resource.data.used == false && request.resource.data.get('unlimited', false) == (request.resource.data.days == 0);
       allow update: if activeUser() && resource.data.uid == request.auth.uid && resource.data.used == false && request.resource.data.used == true && request.resource.data.uid == resource.data.uid;
       allow delete: if privileged();
     }
@@ -183,8 +184,8 @@ service cloud.firestore {
         allow read: if privileged() || (activeUser() && forumAvailable(forumId) && request.auth.uid in get(/databases/$(database)/documents/forums/$(forumId)).data.get('memberIds', []));
         allow create: if request.resource.data.uid == request.auth.uid &&
         request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 1000 &&
-        request.resource.data.isAdmin == admin() &&
-        request.resource.data.isAuthor == author() &&
+        request.resource.data.get('isAdmin', false) == admin() &&
+        request.resource.data.get('isAuthor', false) == author() &&
         request.resource.data.premiumPurchases == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('premiumPurchases',0) &&
         (privileged() ||
           (activeUser() && forumAvailable(forumId) &&

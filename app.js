@@ -43,6 +43,7 @@ const premiumUntilMillis = value => {
   return 0;
 };
 const isPremiumActive = value => premiumUntilMillis(value) > Date.now();
+const isUnlimitedPremium = () => canAdmin() || profile?.premiumUnlimited === true;
 const canUsePremium = () => canAdmin() || isPremiumActive(profile?.premiumUntil);
 const premiumBadgeLevel = count => {
   const n = Number(count || 0);
@@ -206,9 +207,10 @@ $("activationForm").onsubmit=async e=>{
       const c=cs.data();
       if(c.uid!==currentUser.uid)throw new Error("Kode ini bukan untuk akun kamu.");
       if(c.used===true)throw new Error("Kode aktivasi sudah digunakan.");
-      const until=c.premiumUntil;
+      const until=c.get?.("premiumUntil", null) ?? c.premiumUntil ?? null;
+      const unlimited=c.unlimited===true;
       const count=Number(us.data()?.premiumPurchases||0)+1;
-      tx.update(userRef,{premiumUntil:until,premiumPurchases:count,lastActivationCode:code});
+      tx.update(userRef,{premiumUntil:until,premiumUnlimited:unlimited,premiumPurchases:count,lastActivationCode:code});
       tx.update(codeRef,{used:true,usedAt:serverTimestamp()});
     });
     $("activationCode").value=""; toast("Premium berhasil diaktifkan."); loadProfile(currentUser);
@@ -559,9 +561,30 @@ async function loadSupportRequests(){
     $("supportResults").innerHTML=s.docs.map(d=>{const r=d.data(); const t=r.createdAt?.toDate?.().toLocaleString("id-ID")||"baru saja"; const ready=r.status==="ready"; const done=r.status==="done"; const action=ready?`<div><span class="tiny muted">Kode aktivasi (20 karakter): </span><b class="activation-code">${esc(r.activationCode||"-")}</b></div><div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button class="secondary" onclick="navigator.clipboard?.writeText('${esc(r.activationCode||"")}');toast('Kode disalin.')">Salin kode</button><button class="secondary" onclick="adminCloseSupport('${d.id}')">Tandai selesai</button></div>`:(done?`<span class="tiny muted">Selesai</span>`:`<button class="secondary" onclick="adminVerifyPremium('${d.id}')">Verifikasi & buat kode</button>`); return `<div class="notice" style="margin:8px 0"><b>@${esc(r.username||"user")}</b> — ${esc(r.displayName||"")}<br>Paket: <b>${esc(r.plan||"Premium")}</b> • Rp${Number(r.price||0).toLocaleString("id-ID")} (${Number(r.days||0)} hari)<br><span class="tiny muted">${t} • ${esc(r.status||"open")}</span><div style="margin-top:8px">${action}</div></div>`}).join("")||`<div class="notice">Belum ada permintaan Premium.</div>`;
   }catch(err){$("supportResults").textContent="Gagal memuat permintaan: "+err.message.replace("Firebase: ","");}
 }
-window.adminVerifyPremium=async id=>{try{await runTransaction(db,async tx=>{const reqRef=doc(db,"supportRequests",id);const snap=await tx.get(reqRef);if(!snap.exists())throw new Error("Permintaan tidak ditemukan.");const r=snap.data();if(r.status!=="waiting_verification")throw new Error("Permintaan ini sudah diproses.");const days=Number(r.days||0);if(!r.uid||days<=0)throw new Error("Data pembelian tidak valid.");const code=activationCode(); if(code.length!==20)throw new Error("Gagal membuat kode aktivasi 20 karakter."); const until=new Date(Date.now()+days*86400000);tx.set(doc(db,"premiumActivations",code),{uid:r.uid,plan:r.plan||"Premium",days,premiumUntil:until,used:false,codeLength:20,createdAt:serverTimestamp()});tx.update(reqRef,{status:"ready",activationCode:code,verifiedAt:serverTimestamp()});tx.set(doc(collection(db,"inbox")),{uid:r.uid,title:"PREMIUM",subject:"Kode aktivasi Premium kamu",message:`Pembayaran ${r.plan||"Premium"} telah diverifikasi admin. Kode aktivasi (20 karakter): ${code}. Masukkan kode ini di Pengaturan > Aktivasi Premium.`,activationCode:code,read:false,createdAt:serverTimestamp()});});toast("Pembayaran diverifikasi. Kode aktivasi dibuat dan dikirim ke Inbox."); await logActivity("premium_verified",`Memverifikasi Premium ${r.plan||"Premium"} untuk @${r.username||"user"}`,{targetUid:r.uid,plan:r.plan||"Premium"}); loadSupportRequests();}catch(err){toast(err.message.replace("Firebase: ",""));}};
+window.adminVerifyPremium=async id=>{try{let verified=null;await runTransaction(db,async tx=>{const reqRef=doc(db,"supportRequests",id);const snap=await tx.get(reqRef);if(!snap.exists())throw new Error("Permintaan tidak ditemukan.");const r=snap.data();if(r.status!=="waiting_verification")throw new Error("Permintaan ini sudah diproses.");const days=Number(r.days||0);if(!r.uid||days<=0)throw new Error("Data pembelian tidak valid.");const code=activationCode();if(code.length!==20)throw new Error("Gagal membuat kode aktivasi 20 karakter.");const until=new Date(Date.now()+days*86400000);verified={r,code};tx.set(doc(db,"premiumActivations",code),{uid:r.uid,plan:r.plan||"Premium",days,premiumUntil:until,unlimited:false,used:false,codeLength:20,createdAt:serverTimestamp()});tx.update(reqRef,{status:"ready",activationCode:code,verifiedAt:serverTimestamp()});tx.set(doc(collection(db,"inbox")),{uid:r.uid,title:"PREMIUM",subject:"Kode aktivasi Premium kamu",message:`Pembayaran ${r.plan||"Premium"} telah diverifikasi admin. Kode aktivasi (20 karakter): ${code}. Masukkan kode ini di Pengaturan > Aktivasi Premium.`,activationCode:code,read:false,createdAt:serverTimestamp()});});toast("Pembayaran diverifikasi. Kode aktivasi dibuat dan dikirim ke Inbox.");if(verified)await logActivity("premium_verified",`Memverifikasi Premium ${verified.r.plan||"Premium"} untuk @${verified.r.username||"user"}`,{targetUid:verified.r.uid,plan:verified.r.plan||"Premium"});loadSupportRequests();}catch(err){toast(err.message.replace("Firebase: ",""));}};
+async function createCustomActivation(formPrefix){
+  if(!canAdmin())return toast("Tidak memiliki akses.");
+  const username=$(formPrefix+"Username").value.trim();
+  const code=$(formPrefix+"Code").value.trim();
+  const unlimited=$(formPrefix+"Unlimited").checked;
+  const days=Math.max(1,Number($(formPrefix+"Days").value)||30);
+  if(!username||code.length!==20)return toast("Username wajib diisi dan kode harus tepat 20 karakter.");
+  try{
+    const target=await getUserByUsername(username); if(!target)return toast("User tidak ditemukan.");
+    const ref=doc(db,"premiumActivations",code);
+    if((await getDoc(ref)).exists())return toast("Kode tersebut sudah digunakan. Pilih kode lain.");
+    const until=unlimited?null:new Date(Date.now()+days*86400000);
+    await setDoc(ref,{uid:target.id,plan:"Premium custom",days:unlimited?0:days,premiumUntil:until,unlimited,used:false,codeLength:20,createdAt:serverTimestamp(),createdBy:currentUser.uid});
+    await addDoc(collection(db,"inbox"),{uid:target.id,title:actorRole().toUpperCase(),subject:"Kode aktivasi Premium custom",message:`Kamu menerima kode aktivasi Premium custom dari ${actorRole()}. Kode: ${code}. ${unlimited?"Durasi: TAK TERBATAS.":`Durasi: ${days} hari.`} Masukkan kode ini di Pengaturan > Aktivasi Premium.`,activationCode:code,read:false,createdAt:serverTimestamp()});
+    await logActivity("premium_custom_code",`Membuat kode Premium custom untuk @${target.username}`,{targetUid:target.id,unlimited,days:unlimited?0:days});
+    $(formPrefix+"Code").value="";toast("Kode aktivasi custom berhasil dibuat dan dikirim ke Inbox.");
+  }catch(e){toast(e.message.replace("Firebase: ",""));}
+}
+
 window.adminCloseSupport=async id=>{try{await updateDoc(doc(db,"supportRequests",id),{status:"done",handledAt:serverTimestamp()});toast("Permintaan ditandai selesai.");loadSupportRequests();}catch(err){toast(err.message.replace("Firebase: ",""));}};
 
+$("customActivationForm")?.addEventListener("submit",e=>{e.preventDefault();createCustomActivation("customActivation")});
+$("authorCustomActivationForm")?.addEventListener("submit",e=>{e.preventDefault();createCustomActivation("authorCustomActivation")});
 $("userSearchForm").onsubmit=async e=>{
   e.preventDefault();
   try{
