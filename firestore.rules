@@ -68,6 +68,13 @@ service cloud.firestore {
          request.resource.data.suspendedUntil == resource.data.suspendedUntil &&
          request.resource.data.get('premiumPurchases',0) == resource.data.get('premiumPurchases',0) &&
          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName'])) ||
+        (admin() && uid != request.auth.uid && !targetAdmin(uid) &&
+         request.resource.data.username == resource.data.username &&
+         request.resource.data.usernameLower == resource.data.usernameLower &&
+         request.resource.data.isAdmin == resource.data.isAdmin &&
+         request.resource.data.banned == resource.data.banned &&
+         request.resource.data.suspendedUntil == resource.data.suspendedUntil &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['premiumUntil','premiumUnlimited','premiumPurchases'])) ||
         (activeUser() && self(uid) &&
          request.resource.data.username == resource.data.username &&
          request.resource.data.usernameLower == resource.data.usernameLower &&
@@ -124,6 +131,11 @@ service cloud.firestore {
       allow create, update, delete: if privileged() && settingId == "maintenance" && request.resource.data.get("imageUrl", "") is string;
     }
 
+    match /siteSettings/botMenu {
+      allow read: if signedIn();
+      allow create, update, delete: if privileged() && request.resource.data.get("imageUrl", "") is string;
+    }
+
     match /activityLogs/{logId} {
       allow read: if privileged();
       allow create: if allowedUser() && request.resource.data.actorId == request.auth.uid && request.resource.data.message is string && request.resource.data.actorRole is string;
@@ -157,7 +169,7 @@ service cloud.firestore {
         request.resource.data.secretCode == resource.data.secretCode &&
         request.resource.data.createdAt == resource.data.createdAt &&
         request.resource.data.maxMembers is int && request.resource.data.maxMembers >= 2 &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['banned','suspendedUntil','bannedAt','bannedBy','suspendedAt','suspendedBy','ownerOnly','maxMembers','botCare']);
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['banned','suspendedUntil','bannedAt','bannedBy','suspendedAt','suspendedBy','ownerOnly','maxMembers','botCare','profanityFilter']);
 
       allow update: if forumOwner(forumId) &&
         request.resource.data.name == resource.data.name &&
@@ -200,7 +212,7 @@ service cloud.firestore {
         (!request.resource.data.get('attachment', null) is map ||
           (request.resource.data.attachment.get('name','') is string && request.resource.data.attachment.get('type','') is string &&
            request.resource.data.attachment.get('size',0) is int && request.resource.data.attachment.get('size',0) <= 104857600 &&
-           request.resource.data.attachment.get('path','') is string && request.resource.data.attachment.get('url','') is string)) &&
+           request.resource.data.attachment.get('url','') is string)) &&
         request.resource.data.get('isAdmin', false) == admin() &&
         request.resource.data.get('isAuthor', false) == author() &&
         request.resource.data.premiumPurchases == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('premiumPurchases',0) &&
@@ -208,7 +220,8 @@ service cloud.firestore {
           (activeUser() && forumAvailable(forumId) &&
            request.auth.uid in get(/databases/$(database)/documents/forums/$(forumId)).data.get('memberIds', []) &&
            (get(/databases/$(database)/documents/forums/$(forumId)).data.get('ownerOnly',false) != true || get(/databases/$(database)/documents/forums/$(forumId)).data.ownerId == request.auth.uid)));
-        allow update, delete: if privileged() || (activeUser() && resource.data.uid == request.auth.uid);
+        allow update: if privileged() || (activeUser() && resource.data.uid == request.auth.uid);
+        allow delete: if privileged() || forumOwner(forumId) || (activeUser() && resource.data.uid == request.auth.uid);
       }
     }
   }
