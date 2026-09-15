@@ -114,8 +114,14 @@ service cloud.firestore {
 
     match /ads/{adId} {
       allow read: if privileged() || (activeUser() && resource.data.get("active", false) == true);
-      allow create: if privileged() && request.resource.data.title is string && request.resource.data.imageUrl is string && request.resource.data.active is bool;
-      allow update, delete: if privileged();
+      allow create: if privileged() && request.resource.data.title is string && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 100 && request.resource.data.imageUrl is string && request.resource.data.active is bool && request.resource.data.intervalSec is int && request.resource.data.intervalSec >= 50 && request.resource.data.intervalSec <= 36000;
+      allow update: if privileged() && request.resource.data.title is string && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 100 && request.resource.data.imageUrl is string && request.resource.data.active is bool && request.resource.data.intervalSec is int && request.resource.data.intervalSec >= 50 && request.resource.data.intervalSec <= 36000;
+      allow delete: if privileged();
+    }
+
+    match /siteSettings/{settingId} {
+      allow read: if signedIn();
+      allow create, update, delete: if privileged() && settingId == "maintenance";
     }
 
     match /activityLogs/{logId} {

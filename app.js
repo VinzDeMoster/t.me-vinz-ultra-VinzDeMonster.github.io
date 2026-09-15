@@ -28,7 +28,8 @@ const CLOUDINARY_CLOUD_NAME = "pyuohspq";
 const CLOUDINARY_UPLOAD_PRESET = "secret_forum_upload";
 const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`;
 const $ = id => document.getElementById(id);
-let currentUser = null, profile = null, activeForum = null, unsubscribeMessages = null, unsubscribeProfile = null, unsubscribeActivations = null, unsubscribeInbox = null, authMode = "login";
+let currentUser = null, profile = null, activeForum = null, unsubscribeMessages = null, unsubscribeProfile = null, unsubscribeActivations = null, unsubscribeInbox = null, unsubscribeMaintenance = null, authMode = "login";
+let lastAdShownAt = 0, adScheduleTimeout = null;
 const messageTextCache = new Map();
 // Website creator / Author. Securely configure this UID, or create authors/{UID} with enabled:true in Firestore.
 const AUTHOR_UID = "Lt8kkzctunb1lXA1rGxz1xXuYlv2";
@@ -102,8 +103,8 @@ function showPage(name){
   document.querySelectorAll(".nav").forEach(x=>x.classList.toggle("active",x.dataset.page===name));
   const titles={home:["Beranda","Kelola forum rahasiamu."],join:["Bergabung Forum","Masukkan secret code untuk bergabung."],create:["Buat Forum","Buat ruang privat baru."],settings:["Pengaturan","Kelola akun dan keamanan."],inbox:["Inbox","Informasi dan pesan penting akun."],contact:["Premium","Pilih paket Premium."],payment:["Pembayaran Premium","Selesaikan pembayaran Premium."],admin:["Admin Panel","Kelola user, premium, forum, dan Inbox."],author:["Author Panel","Pemilik utama website dan otoritas tertinggi."],activity:["Aktivitas Website","Riwayat tindakan administrasi dan moderasi."],forum:["Forum","Obrolan teks privat."]};
   $("pageTitle").textContent=titles[name]?.[0]||"Secret Forum"; $("pageSubtitle").textContent=titles[name]?.[1]||"";
-  if(name==="admin" && canAdmin()){ loadAdminForums(); loadSupportRequests(); }
-  if(name==="author" && isAuthor()) loadAuthorPanel();
+  if(name==="admin" && canAdmin()){ loadAdminForums(); loadSupportRequests(); loadAdsManagement("adminAdsResults"); loadMaintenanceSettings(); }
+  if(name==="author" && isAuthor()){ loadAuthorPanel(); loadAdsManagement("authorAdsResults"); loadMaintenanceSettings(); }
   if(name==="activity" && currentUser) loadPublicActivity();
   if(name==="inbox" && currentUser) loadInbox();
   if(name==="settings" && currentUser) loadActivationStatus();
@@ -143,6 +144,10 @@ async function loadProfile(user){
     throw new Error("Akun kamu sedang disuspend sampai "+new Date(suspendedUntil).toLocaleString("id-ID")+".");
   }
   profile={uid:user.uid,...data,premiumPurchases:Number(data.premiumPurchases||0),isAdmin,isAuthor};
+  if(unsubscribeMaintenance)unsubscribeMaintenance();
+  unsubscribeMaintenance=onSnapshot(doc(db,"siteSettings","maintenance"),s=>{
+    const m=s.exists()?s.data():{}; applyMaintenance(m.enabled===true, m.message||"");
+  },e=>console.warn("maintenance:",e));
   if(unsubscribeProfile)unsubscribeProfile();
   if(unsubscribeActivations)unsubscribeActivations();
   unsubscribeActivations=null;
@@ -163,6 +168,25 @@ async function loadProfile(user){
   });
   setLoggedInUI();
 }
+function applyMaintenance(enabled,message=""){
+  const modal=$("maintenanceModal"); if(!modal)return;
+  const blocked=enabled && !!profile && !canAdmin();
+  $("maintenanceMessage").textContent=message||"Untuk Sementara Waktu Website Ini Tidak Bisa Di Pakai!!";
+  modal.classList.toggle("hidden",!blocked);
+  document.body.classList.toggle("maintenance-active",blocked);
+}
+async function saveMaintenance(enabled,message){
+  if(!canAdmin())return toast("Hanya Admin/Author yang dapat mengatur maintenance.");
+  try{await setDoc(doc(db,"siteSettings","maintenance"),{enabled:Boolean(enabled),message:String(message||""),updatedBy:currentUser.uid,updatedRole:actorRole(),updatedAt:serverTimestamp()},{merge:true}); await logActivity(enabled?"maintenance_on":"maintenance_off",enabled?"Mengaktifkan maintenance website":"Menonaktifkan maintenance website"); toast(enabled?"Maintenance diaktifkan.":"Maintenance dinonaktifkan.");}
+  catch(e){toast(e.message.replace("Firebase: ",""));}
+}
+async function loadMaintenanceSettings(){
+  if(!canAdmin())return;
+  try{const s=await getDoc(doc(db,"siteSettings","maintenance"));const d=s.exists()?s.data():{}; ["admin","author"].forEach(role=>{const a=$(role+"MaintenanceEnabled"),m=$(role+"MaintenanceMessage");if(a)a.checked=d.enabled===true;if(m)m.value=d.message||"";}); applyMaintenance(d.enabled===true,d.message||"");}catch(e){console.warn("load maintenance:",e);}
+}
+$("adminMaintenanceForm")?.addEventListener("submit",e=>{e.preventDefault();saveMaintenance($("adminMaintenanceEnabled").checked,$("adminMaintenanceMessage").value.trim());});
+$("authorMaintenanceForm")?.addEventListener("submit",e=>{e.preventDefault();saveMaintenance($("authorMaintenanceEnabled").checked,$("authorMaintenanceMessage").value.trim());});
+
 async function getUserByUsername(username){
   const q=query(collection(db,"users"),where("usernameLower","==",username.trim().toLowerCase()),limit(1)); const s=await getDocs(q); return s.empty?null:{id:s.docs[0].id,...s.docs[0].data()};
 }
@@ -873,32 +897,49 @@ $("authorUserSearchForm")?.addEventListener("submit",async e=>{
   }catch(e){toast(e.message.replace("Firebase: ",""));}
 });
 
+function adIntervalLabel(sec){sec=Number(sec||120);if(sec<60)return sec+" detik";if(sec%3600===0)return (sec/3600)+" jam";if(sec%60===0)return (sec/60)+" menit";return sec+" detik";}
 async function showRandomAd(){
-  if(!profile || profile.isAdmin || profile.isAuthor) return;
+  if(!profile || profile.isAdmin || profile.isAuthor || isPremiumActive(profile.premiumUntil)) return;
+  const now=Date.now(); if(now-lastAdShownAt<50000)return;
   try{
-    const snap=await getDocs(query(collection(db,"ads"),where("active","==",true),limit(10)));
+    const snap=await getDocs(query(collection(db,"ads"),where("active","==",true),limit(50)));
     if(!snap.size)return;
-    const docs=snap.docs; const ad=docs[Math.floor(Math.random()*docs.length)].data();
-    const modal=$("adModal"), img=$("adImage"), title=$("adTitle"), body=$("adBody"), close=$("adClose");
-    if(!modal||!img||!close)return;
-    img.src=ad.imageUrl; img.alt=ad.title||"Iklan"; title.textContent=ad.title||"Iklan"; body.textContent=ad.description||"";
-    const start=Date.now(); close.disabled=true;
-    const tick=()=>{const left=Math.max(0,5000-(Date.now()-start)); close.textContent=left?`Tutup (${Math.ceil(left/1000)}s)`:"Tutup ×"; close.disabled=left>0;if(left)requestAnimationFrame(tick);}; tick();
-    modal.classList.remove("hidden");
-    close.onclick=()=>{modal.classList.add("hidden"); if(ad.linkUrl){window.open(ad.linkUrl,"_blank","noopener");}};
+    const due=snap.docs.filter(d=>{
+      const a=d.data(); const interval=Math.min(36000,Math.max(50,Number(a.intervalSec||120))); const key="sf_ad_next_"+d.id; const next=Number(localStorage.getItem(key)||0); return now>=next;
+    });
+    if(!due.length)return;
+    const d=due[Math.floor(Math.random()*due.length)], ad=d.data();
+    const modal=$("adModal"), img=$("adImage"), title=$("adTitle"), body=$("adBody"), close=$("adClose"); if(!modal||!img||!close)return;
+    img.src=ad.imageUrl||""; img.alt=ad.title||"Iklan"; title.textContent=ad.title||"Iklan"; body.textContent=ad.description||"";
+    const interval=Math.min(36000,Math.max(50,Number(ad.intervalSec||120))); localStorage.setItem("sf_ad_next_"+d.id,String(now+interval*1000)); lastAdShownAt=now;
+    const start=Date.now(); close.disabled=true; const tick=()=>{const left=Math.max(0,5000-(Date.now()-start));close.textContent=left?`Tutup (${Math.ceil(left/1000)}s)`:"Tutup ×";close.disabled=left>0;if(left)requestAnimationFrame(tick)};tick(); modal.classList.remove("hidden");
+    close.onclick=()=>{modal.classList.add("hidden");if(ad.linkUrl)window.open(ad.linkUrl,"_blank","noopener");};
   }catch(e){console.warn("ad:",e);}
 }
 function scheduleAds(){
-  if(window.adTimer)clearInterval(window.adTimer);
-  if(profile && !profile.isAdmin && !profile.isAuthor){ setTimeout(showRandomAd,2500); window.adTimer=setInterval(showRandomAd,600000); }
+  if(window.adTimer)clearInterval(window.adTimer); if(adScheduleTimeout)clearTimeout(adScheduleTimeout);
+  if(profile && !profile.isAdmin && !profile.isAuthor && !isPremiumActive(profile.premiumUntil)){
+    adScheduleTimeout=setTimeout(showRandomAd,2500); window.adTimer=setInterval(showRandomAd,5000);
+  }
 }
 async function publishAd(formId){
-  if(!canAdmin())return; const form=$(formId); if(!form)return; const file=$(formId.replace("Form","Image"))?.files?.[0]; const title=$(formId.replace("Form","Title"))?.value.trim(); const description=$(formId.replace("Form","Description"))?.value.trim(); const linkUrl=$(formId.replace("Form","Link"))?.value.trim();
+  if(!canAdmin())return; const form=$(formId);if(!form)return;
+  const prefix=formId.replace("Form",""); const file=$(prefix+"Image")?.files?.[0]; const title=$(prefix+"Title")?.value.trim(); const description=$(prefix+"Description")?.value.trim(); const linkUrl=$(prefix+"Link")?.value.trim(); const intervalSec=Math.min(36000,Math.max(50,Number($(prefix+"Interval")?.value||120)));
   if(!file||!title)return toast("Judul dan gambar iklan wajib diisi.");
-  try{const btn=form.querySelector("button[type=submit]");if(btn){btn.disabled=true;btn.textContent="Mengunggah…";} const attachment=await uploadCloudinaryFile(file,`secret-forum/ads/${currentUser.uid}`,10*1024*1024); const old=await getDocs(query(collection(db,"ads"),where("active","==",true))); for(let i=0;i<old.docs.length;i+=450){const b=writeBatch(db);old.docs.slice(i,i+450).forEach(d=>b.update(d.ref,{active:false,updatedAt:serverTimestamp()}));await b.commit();} await addDoc(collection(db,"ads"),{title,description,linkUrl,imageUrl:attachment.url,imageName:attachment.name,active:true,createdBy:currentUser.uid,createdByRole:actorRole(),createdAt:serverTimestamp()}); await logActivity("ad_published",`Menerbitkan iklan “${title}”`);toast("Iklan berhasil diterbitkan.");form.reset();}catch(e){toast(e.message.replace("Firebase: ",""));}finally{const btn=form.querySelector("button[type=submit]");if(btn){btn.disabled=false;btn.textContent="Terbitkan iklan";}}
+  try{const btn=form.querySelector("button[type=submit]");if(btn){btn.disabled=true;btn.textContent="Mengunggah…";} const attachment=await uploadCloudinaryFile(file,`secret-forum/ads/${currentUser.uid}`,10*1024*1024); await addDoc(collection(db,"ads"),{title,description,linkUrl,imageUrl:attachment.url,imageName:attachment.name,active:true,intervalSec,createdBy:currentUser.uid,createdByRole:actorRole(),createdAt:serverTimestamp(),updatedAt:serverTimestamp()}); await logActivity("ad_published",`Menerbitkan iklan “${title}”`,{intervalSec}); toast("Iklan berhasil diterbitkan.");form.reset(); await loadAdsManagement(isAuthor()?"authorAdsResults":"adminAdsResults");}catch(e){toast(e.message.replace("Firebase: ",""));}finally{const btn=form.querySelector("button[type=submit]");if(btn){btn.disabled=false;btn.textContent=isAuthor()?"Terbitkan iklan":"Terbitkan iklan";}}
+}
+async function loadAdsManagement(containerId){
+  if(!canAdmin())return; const box=$(containerId);if(!box)return;box.innerHTML='<div class="notice">Memuat semua iklan…</div>';
+  try{const s=await getDocs(query(collection(db,"ads"),orderBy("createdAt","desc"),limit(100)));box.innerHTML=s.docs.map(d=>{const a=d.data(),id=d.id,interval=Math.min(36000,Math.max(50,Number(a.intervalSec||120)));return `<div class="ad-manage-card"><div class="ad-manage-thumb">${a.imageUrl?`<img src="${esc(a.imageUrl)}" alt="${esc(a.title||"Iklan")}">`:""}</div><div class="ad-manage-info"><b>${esc(a.title||"Iklan")}</b><p class="tiny muted">${esc(a.description||"Tanpa deskripsi")}</p><span class="tiny">${a.active?"AKTIF":"NONAKTIF"} • tampil tiap ${esc(adIntervalLabel(interval))}</span></div><div class="ad-manage-actions"><button class="secondary" data-ad-toggle="${id}" data-active="${a.active?"1":"0"}">${a.active?"Nonaktifkan":"Aktifkan"}</button><button class="secondary" data-ad-edit="${id}">Ubah</button><button class="secondary" data-ad-delete="${id}">Hapus</button></div></div>`}).join("")||'<div class="notice">Belum ada iklan terpasang.</div>';
+    box.querySelectorAll("[data-ad-toggle]").forEach(b=>b.onclick=async()=>{try{await updateDoc(doc(db,"ads",b.dataset.adToggle),{active:b.dataset.active!=="1",updatedAt:serverTimestamp()});await logActivity("ad_status",`${b.dataset.active==="1"?"Menonaktifkan":"Mengaktifkan"} iklan`);loadAdsManagement(containerId);}catch(e){toast(e.message.replace("Firebase: ",""));}});
+    box.querySelectorAll("[data-ad-delete]").forEach(b=>b.onclick=async()=>{if(!confirm("Hapus iklan ini?"))return;try{await deleteDoc(doc(db,"ads",b.dataset.adDelete));await logActivity("ad_deleted","Menghapus iklan",{adId:b.dataset.adDelete});loadAdsManagement(containerId);}catch(e){toast(e.message.replace("Firebase: ",""));}});
+    box.querySelectorAll("[data-ad-edit]").forEach(b=>b.onclick=async()=>{const d=await getDoc(doc(db,"ads",b.dataset.adEdit));if(!d.exists())return;const a=d.data();const title=prompt("Judul iklan:",a.title||"");if(title===null)return;const description=prompt("Deskripsi iklan:",a.description||"");if(description===null)return;const link=prompt("Link iklan (opsional):",a.linkUrl||"");if(link===null)return;const iv=prompt("Jeda tampil dalam detik (50–36000):",String(a.intervalSec||120));if(iv===null)return;const interval=Math.min(36000,Math.max(50,Number(iv)||120));try{await updateDoc(doc(db,"ads",b.dataset.adEdit),{title:title.trim().slice(0,100),description:description.trim().slice(0,300),linkUrl:link.trim(),intervalSec:interval,updatedAt:serverTimestamp()});await logActivity("ad_updated",`Mengubah iklan “${title.trim()}”`,{adId:b.dataset.adEdit});loadAdsManagement(containerId);}catch(e){toast(e.message.replace("Firebase: ",""));}});
+  }catch(e){box.innerHTML=`<div class="notice">Gagal memuat iklan: ${esc(e.message.replace("Firebase: ",""))}</div>`;}
 }
 $("adminAdForm")?.addEventListener("submit",e=>{e.preventDefault();publishAd("adminAdForm")});
 $("authorAdForm")?.addEventListener("submit",e=>{e.preventDefault();publishAd("authorAdForm")});
+$("refreshAdminAdsBtn")?.addEventListener("click",()=>loadAdsManagement("adminAdsResults"));
+$("refreshAuthorAdsBtn")?.addEventListener("click",()=>loadAdsManagement("authorAdsResults"));
 
 let promoTimer=null;
 function schedulePromo(){clearInterval(promoTimer);promoTimer=setInterval(()=>{if(profile&&!($("promo").classList.contains("hidden")))return;if(profile&&!profile.isAdmin&&!profile.isAuthor){$("promo").classList.remove("hidden");setTimeout(()=>$("promo").classList.add("hidden"),5000)}},600000)}
@@ -908,6 +949,6 @@ $("promoMonthly").onclick=()=>showPage("contact");
 
 onAuthStateChanged(auth,async user=>{
   currentUser=user;
-  if(!user){ profile=null; activeForum=null; if(unsubscribeMessages)unsubscribeMessages(); if(unsubscribeProfile)unsubscribeProfile(); if(unsubscribeActivations)unsubscribeActivations(); if(unsubscribeInbox)unsubscribeInbox(); unsubscribeMessages=unsubscribeProfile=unsubscribeActivations=unsubscribeInbox=null; if(promoTimer){clearInterval(promoTimer); promoTimer=null;} if(window.adTimer){clearInterval(window.adTimer);window.adTimer=null;} $("promo")?.classList.add("hidden"); $("adModal")?.classList.add("hidden"); }
+  if(!user){ profile=null; activeForum=null; if(unsubscribeMessages)unsubscribeMessages(); if(unsubscribeProfile)unsubscribeProfile(); if(unsubscribeActivations)unsubscribeActivations(); if(unsubscribeInbox)unsubscribeInbox(); if(unsubscribeMaintenance)unsubscribeMaintenance(); unsubscribeMessages=unsubscribeProfile=unsubscribeActivations=unsubscribeInbox=unsubscribeMaintenance=null; if(promoTimer){clearInterval(promoTimer); promoTimer=null;} if(window.adTimer){clearInterval(window.adTimer);window.adTimer=null;} if(adScheduleTimeout){clearTimeout(adScheduleTimeout);adScheduleTimeout=null;} $("promo")?.classList.add("hidden"); $("adModal")?.classList.add("hidden"); }
   if(user){try{await loadProfile(user);schedulePromo();scheduleAds()}catch(e){toast(e.message)}}else{$("appView").classList.add("hidden");$("authView").classList.remove("hidden");}
 });
