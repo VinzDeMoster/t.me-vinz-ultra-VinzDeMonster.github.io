@@ -23,11 +23,15 @@ service cloud.firestore {
       return exists(/databases/$(database)/documents/admins/$(uid)) &&
         get(/databases/$(database)/documents/admins/$(uid)).data.get("enabled", false) == true;
     }
+    function suspensionExpired(value) {
+      return value == null ||
+        (value is timestamp && value <= request.time) ||
+        (value is number && value <= request.time.toMillis());
+    }
     function activeUser() {
       return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get("banned", false) != true &&
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get("suspendedUntil", null) == null ||
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get("suspendedUntil", null) <= request.time);
+        suspensionExpired(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get("suspendedUntil", null));
     }
     function allowedUser() { return privileged() || activeUser(); }
     function premiumActive() {
@@ -39,8 +43,7 @@ service cloud.firestore {
     }
     function forumAvailable(forumId) {
       let f = get(/databases/$(database)/documents/forums/$(forumId)).data;
-      return f.get("banned", false) != true &&
-        (f.get("suspendedUntil", null) == null || f.get("suspendedUntil", null) <= request.time);
+      return f.get("banned", false) != true && suspensionExpired(f.get("suspendedUntil", null));
     }
     function forumOwner(forumId) {
       return activeUser() && get(/databases/$(database)/documents/forums/$(forumId)).data.ownerId == request.auth.uid;

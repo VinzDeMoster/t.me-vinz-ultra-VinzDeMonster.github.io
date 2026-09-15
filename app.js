@@ -140,12 +140,16 @@ function setLoggedInUI(){
   loadForums(); updateMemberLimitUI(); loadActivationStatus(); loadInbox(); showPage("home");
 }
 async function loadProfile(user){
+  // Profile is the only required read for login. Role documents are optional so
+  // an older/mismatched Rules deployment cannot leave the login screen stuck.
   const snap=await getDoc(doc(db,"users",user.uid));
   if(!snap.exists()){ await signOut(auth); throw new Error("Profil user tidak ditemukan."); }
-  const [adminSnap,authorSnap]=await Promise.all([getDoc(doc(db,"admins",user.uid)),getDoc(doc(db,"authors",user.uid))]);
   const data=snap.data();
-  const isAuthor=(AUTHOR_UID && AUTHOR_UID!=="REPLACE_WITH_WEBSITE_CREATOR_UID" && user.uid===AUTHOR_UID) || (authorSnap.exists()&&authorSnap.data().enabled===true);
-  const isAdmin=!isAuthor && ((adminSnap.exists()&&adminSnap.data().enabled===true) || data.isAdmin===true);
+  let adminEnabled=false, authorEnabled=false;
+  try{ const s=await getDoc(doc(db,"admins",user.uid)); adminEnabled=s.exists()&&s.data().enabled===true; }catch(e){ console.warn("Admin role read:",e); }
+  try{ const s=await getDoc(doc(db,"authors",user.uid)); authorEnabled=s.exists()&&s.data().enabled===true; }catch(e){ console.warn("Author role read:",e); }
+  const isAuthor=(AUTHOR_UID && AUTHOR_UID!=="REPLACE_WITH_WEBSITE_CREATOR_UID" && user.uid===AUTHOR_UID) || authorEnabled;
+  const isAdmin=!isAuthor && (adminEnabled || data.isAdmin===true);
   const suspendedUntil=premiumUntilMillis(data.suspendedUntil);
   if(!isAuthor && !isAdmin && data.banned===true){
     await signOut(auth);
@@ -1242,6 +1246,16 @@ $("promoMonthly").onclick=()=>showPage("contact");
 
 onAuthStateChanged(auth,async user=>{
   currentUser=user;
-  if(!user){ profile=null; activeForum=null; if(unsubscribeMessages)unsubscribeMessages(); if(unsubscribeProfile)unsubscribeProfile(); if(unsubscribeActivations)unsubscribeActivations(); if(unsubscribeInbox)unsubscribeInbox(); if(unsubscribeMaintenance)unsubscribeMaintenance(); unsubscribeMessages=unsubscribeProfile=unsubscribeActivations=unsubscribeInbox=unsubscribeMaintenance=null; if(promoTimer){clearInterval(promoTimer); promoTimer=null;} if(window.adTimer){clearInterval(window.adTimer);window.adTimer=null;} if(adScheduleTimeout){clearTimeout(adScheduleTimeout);adScheduleTimeout=null;} if(botExpiryTimer){clearTimeout(botExpiryTimer);botExpiryTimer=null;} $("promo")?.classList.add("hidden"); $("adModal")?.classList.add("hidden"); }
-  if(user){try{await loadProfile(user);schedulePromo();scheduleAds()}catch(e){toast(e.message)}}else{$("appView").classList.add("hidden");$("authView").classList.remove("hidden");}
+  if(!user){ profile=null; activeForum=null; if(unsubscribeMessages)unsubscribeMessages(); if(unsubscribeProfile)unsubscribeProfile(); if(unsubscribeActivations)unsubscribeActivations(); if(unsubscribeInbox)unsubscribeInbox(); if(unsubscribeMaintenance)unsubscribeMaintenance(); unsubscribeMessages=unsubscribeProfile=unsubscribeActivations=unsubscribeInbox=unsubscribeMaintenance=null; if(promoTimer){clearInterval(promoTimer); promoTimer=null;} if(window.adTimer){clearInterval(window.adTimer);window.adTimer=null;} if(adScheduleTimeout){clearTimeout(adScheduleTimeout);adScheduleTimeout=null;} if(botExpiryTimer){clearTimeout(botExpiryTimer);botExpiryTimer=null;} $("promo")?.classList.add("hidden"); $("adModal")?.classList.add("hidden"); $("appView")?.classList.add("hidden"); $("authView")?.classList.remove("hidden"); return; }
+  try{
+    await loadProfile(user);
+    schedulePromo();
+    scheduleAds();
+  }catch(e){
+    console.error("Auth/profile initialization:",e);
+    $("appView")?.classList.add("hidden");
+    $("authView")?.classList.remove("hidden");
+    try{await signOut(auth);}catch(_){}
+    toast((e?.message||"Gagal memuat akun.").replace("Firebase: ",""),7000);
+  }
 });
