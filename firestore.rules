@@ -37,6 +37,18 @@ service cloud.firestore {
         (u.get("premiumUntil", null) is number && u.get("premiumUntil", null) > request.time.toMillis())
       );
     }
+    function botRentalActive() {
+      return exists(/databases/$(database)/documents/botRentals/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/botRentals/$(request.auth.uid)).data.get("expiresAt", null) != null &&
+        get(/databases/$(database)/documents/botRentals/$(request.auth.uid)).data.get("expiresAt", null) > request.time;
+    }
+    function botRentalForForum(forumId) {
+      let r = getAfter(/databases/$(database)/documents/botRentals/$(request.auth.uid)).data;
+      return r.get("uid", "") == request.auth.uid &&
+        r.get("expiresAt", null) is timestamp && r.get("expiresAt", null) > request.time &&
+        forumId in r.get("forumIds", []);
+    }
+
     function forumAvailable(forumId) {
       let f = get(/databases/$(database)/documents/forums/$(forumId)).data;
       return f.get("banned", false) != true &&
@@ -117,6 +129,49 @@ service cloud.firestore {
       allow create: if privileged() && request.resource.id.size() == 20 && request.resource.data.uid is string && request.resource.data.plan is string && request.resource.data.days is int && request.resource.data.days >= 0 && request.resource.data.used == false && request.resource.data.get('unlimited', false) == (request.resource.data.days == 0);
       allow update: if activeUser() && resource.data.uid == request.auth.uid && resource.data.used == false && request.resource.data.used == true && request.resource.data.uid == resource.data.uid;
       allow delete: if privileged();
+    }
+
+    match /botActivations/{code} {
+      allow read: if privileged() || (activeUser() && resource.data.uid == request.auth.uid);
+      allow create: if privileged() && request.resource.id.size() == 20 &&
+        request.resource.data.uid is string && request.resource.data.plan is string &&
+        request.resource.data.days is int && request.resource.data.days > 0 &&
+        request.resource.data.maxForums is int && request.resource.data.maxForums >= 1 && request.resource.data.maxForums <= 30 &&
+        request.resource.data.expiresAt is timestamp && request.resource.data.used == false;
+      allow update: if activeUser() && request.auth.uid == resource.data.uid &&
+        resource.data.used == false && request.resource.data.used == true &&
+        request.resource.data.uid == resource.data.uid &&
+        request.resource.data.expiresAt == resource.data.expiresAt &&
+        request.resource.data.maxForums == resource.data.maxForums;
+      allow delete: if privileged();
+    }
+
+    match /botRentals/{uid} {
+      allow read: if privileged() || self(uid);
+      allow create: if activeUser() && self(uid) &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.activationCode is string && request.resource.data.activationCode.size() == 20 &&
+        exists(/databases/$(database)/documents/botActivations/$(request.resource.data.activationCode)) &&
+        get(/databases/$(database)/documents/botActivations/$(request.resource.data.activationCode)).data.uid == request.auth.uid &&
+        getAfter(/databases/$(database)/documents/botActivations/$(request.resource.data.activationCode)).data.used == true &&
+        request.resource.data.expiresAt == get(/databases/$(database)/documents/botActivations/$(request.resource.data.activationCode)).data.expiresAt &&
+        request.resource.data.maxForums == get(/databases/$(database)/documents/botActivations/$(request.resource.data.activationCode)).data.maxForums &&
+        request.resource.data.expiresAt > request.time &&
+        request.resource.data.forumIds is list && request.resource.data.forumIds.size() <= request.resource.data.maxForums &&
+        request.resource.data.forumIds.size() <= 30;
+      allow update: if activeUser() && self(uid) &&
+        resource.data.uid == request.auth.uid &&
+        request.resource.data.uid == resource.data.uid &&
+        request.resource.data.activationCode == resource.data.activationCode &&
+        request.resource.data.expiresAt == resource.data.expiresAt &&
+        request.resource.data.maxForums == resource.data.maxForums &&
+        request.resource.data.expiresAt > request.time &&
+        request.resource.data.forumIds is list &&
+        request.resource.data.forumIds.size() == resource.data.forumIds.size() + 1 &&
+        request.resource.data.forumIds.hasAll(resource.data.forumIds) &&
+        request.resource.data.forumIds.size() <= request.resource.data.maxForums &&
+        request.resource.data.forumIds.size() <= 30;
+      allow delete: if privileged() || self(uid);
     }
 
     match /ads/{adId} {
@@ -200,6 +255,22 @@ service cloud.firestore {
         request.resource.data.memberIds.size() == resource.data.memberIds.size() + 1 &&
         request.resource.data.memberIds.hasAll(resource.data.memberIds) &&
         request.resource.data.memberIds.size() <= resource.data.maxMembers;
+
+      allow update: if activeUser() && forumAvailable(forumId) &&
+        (request.auth.uid == resource.data.ownerId || request.auth.uid in resource.data.get('memberIds', [])) &&
+        request.resource.data.ownerId == resource.data.ownerId &&
+        request.resource.data.name == resource.data.name &&
+        request.resource.data.maxMembers == resource.data.maxMembers &&
+        request.resource.data.secretCode == resource.data.secretCode &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['botCare']) &&
+        request.resource.data.botCare is map &&
+        request.resource.data.botCare.get('enabled', false) == true &&
+        request.resource.data.botCare.get('name', '') == 'Bot Care' &&
+        request.resource.data.botCare.get('botId', '') == 'BOT_CARE' &&
+        request.resource.data.botCare.get('expiresAt', null) is timestamp &&
+        request.resource.data.botCare.get('expiresAt', null) > request.time &&
+        botRentalForForum(forumId);
 
       allow delete: if author();
 
