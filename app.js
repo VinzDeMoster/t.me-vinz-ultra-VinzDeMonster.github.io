@@ -367,34 +367,39 @@ async function loadForums(){
     $("forumList").innerHTML=`<div class="notice">Gagal memuat forum: ${esc(err.message.replace("Firebase: ",""))}</div>`;
   }
 }
-const BOT_COMMANDS=["menu","help","ping","waktu","tanggal","info","forum","owner","anggota","kapasitas","sisa","status","mode","kode","bot","premium","profil","id","aturan","versi","random","angka","hitung","morse","hex","bin","base64","rot13","quote","givepremium","kick","hapuspesan","sensor"];
+const BOT_COMMANDS=["menu","help","ping","waktu","tanggal","info","forum","owner","anggota","kapasitas","sisa","status","mode","kode","bot","premium","profil","id","aturan","versi","random","angka","hitung","morse","hex","bin","base64","rot13","quote","dadu","koin","suit","8ball","tebakangka","trivia","faktorial","prima","ganjilgenap","balik","kapital","kecil","hitungkata","emoji","ascii","uptime","rawatforum","sensor","kick","hapuspesan","slowmode","lockdown"];
+const botGameState = new Map();
+const BOT_START_TIME = Date.now();
 function botActiveFor(forum){return !!forum?.botCare?.enabled && premiumUntilMillis(forum.botCare.expiresAt)>Date.now();}
 function botMenuText(forum){
   const now=new Date();
   const owner=currentUser?.uid===forum?.ownerId?"Iya":"Bukan";
-  const lines=[
-    `Hai ${profile?.displayName||"User"}! 👋`,
-    `Tanggal: ${now.toLocaleDateString("id-ID",{weekday:"long",year:"numeric",month:"long",day:"numeric"})}`,
-    `Waktu: ${now.toLocaleTimeString("id-ID")}`,
-    `Role: ${botRoleLabel()}`,
-    `Owner Forum: ${owner}`,
-    `Forum: ${forum?.name||"Forum"}`,
+  return [
+    `🤖 BOT CARE • ${forum?.name||"Forum"}`,
+    `Halo ${profile?.displayName||"User"}! Bot Care siap membantu.`,
+    `Role: ${botRoleLabel()} • Owner: ${owner}`,
+    `Status: ${botActiveFor(forum)?"AKTIF ✓":"TIDAK AKTIF"}`,
     "",
-    "MENU BOT CARE",
-    "#menu • .menu • $menu • &menu • /menu",
-    "#help • #ping • #waktu • #tanggal • #info • #forum",
-    "#owner • #anggota • #kapasitas • #sisa • #status • #mode",
-    "#kode • #bot • #premium • #profil • #id • #aturan • #versi",
-    "#random • #angka teks • #hitung rumus • #morse teks",
-    "#hex teks • #bin teks • #base64 teks • #rot13 teks • #quote",
+    "📌 INFORMASI",
+    "#help  #ping  #waktu  #tanggal  #info  #forum  #owner  #anggota  #kapasitas  #sisa",
+    "#status  #mode  #kode  #bot  #premium  #profil  #id  #aturan  #versi  #uptime",
     "",
-    "MANAJEMEN (Owner/Admin/Author)",
-    "#kick @username • #mode on/off • #hapuspesan terakhir • #sensor on/off",
+    "🧩 UTILITAS",
+    "#random  #angka teks  #hitung rumus  #morse teks  #hex teks",
+    "#bin teks  #base64 teks  #rot13 teks  #quote  #faktorial angka  #prima angka",
+    "#ganjilgenap angka  #balik teks  #kapital teks  #kecil teks  #hitungkata teks",
+    "#emoji teks  #ascii teks",
     "",
-    "PREMIUM (Admin/Author)",
-    "#givepremium @username hari",
-  ];
-  return lines.join("\n");
+    "🎮 GAME & HIBURAN",
+    "#dadu [maks]  #koin  #suit batu/kertas/gunting  #8ball pertanyaan",
+    "#tebakangka  #tebakangka angka  #trivia",
+    "",
+    "🛡️ PERAWATAN FORUM • Owner/Admin/Author",
+    "#rawatforum on/off  #sensor on/off  #kick @username",
+    "#hapuspesan terakhir  #slowmode [detik/off]  #lockdown on/off",
+    "",
+    `51 perintah tersedia • ${now.toLocaleTimeString("id-ID")}`
+  ].join("\n");
 }
 function encodeMorseText(v){const map={a:".-",b:"-...",c:"-.-.",d:"-..",e:".",f:"..-.",g:"--.",h:"....",i:"..",j:".---",k:"-.-",l:".-..",m:"--",n:"-.",o:"---",p:".--.",q:"--.-",r:".-.",s:"...",t:"-",u:"..-",v:"...-",w:".--",x:"-..-",y:"-.--",z:"--.."," ":"/"};return [...v.toLowerCase()].map(c=>map[c]||c).join(" ")}
 function encodeA1Z26(v){return [...v.toUpperCase()].map(c=>/[A-Z]/.test(c)?c.charCodeAt(0)-64:c===' '?0:c).join(' ')}
@@ -405,9 +410,22 @@ function rot13(v){return v.replace(/[A-Za-z]/g,c=>String.fromCharCode(c<='Z'?((c
 function botReply(command,forum){
   const parsed=normalizeBotCommand(command); if(!parsed)return null;
   const {cmd,arg}=parsed; const members=(forum.memberIds||[]).filter(x=>x!=="BOT_CARE").length,max=forum.maxMembers||0,now=new Date();
-  const r={help:'Gunakan #menu untuk melihat semua perintah Bot Care.',ping:'Pong! Bot Care aktif ✓',waktu:`Sekarang pukul ${now.toLocaleTimeString('id-ID')}.`,tanggal:now.toLocaleDateString('id-ID',{weekday:'long',year:'numeric',month:'long',day:'numeric'}),info:`Forum: ${forum.name||'Forum'}\nAnggota: ${members}/${max||'∞'}\nRole kamu: ${botRoleLabel()}`,forum:`Forum ${forum.name||'Forum'} aktif.`,owner:forum.ownerId===currentUser.uid?'Kamu adalah owner forum.':`Forum dimiliki UID: ${forum.ownerId}`,anggota:`Jumlah anggota: ${members}`,kapasitas:`Kapasitas: ${max||'tanpa batas'}`,sisa:max?`Sisa slot: ${Math.max(0,max-members)}`:'Tidak dibatasi',status:forum.banned?'Forum dibanned.':premiumUntilMillis(forum.suspendedUntil)>Date.now()?`Forum disuspend sampai ${new Date(premiumUntilMillis(forum.suspendedUntil)).toLocaleString('id-ID')}.`:'Forum aktif.',mode:forum.ownerOnly?'Hanya owner yang dapat mengirim chat.':'Semua anggota dapat mengirim chat.',kode:`Secret code: ${forum.secretCode||'tidak tersedia'}`,bot:botActiveFor(forum)?`Bot Care aktif sampai ${new Date(premiumUntilMillis(forum.botCare.expiresAt)).toLocaleString('id-ID')}.`:'Bot Care tidak aktif.',premium:'Premium: custom secret code, translator sandi, dan kapasitas sampai 400 anggota.',profil:`Nama: ${profile.displayName}\nUsername: @${profile.username}`,id:`UID kamu: ${currentUser.uid}`,aturan:'Hormati anggota lain, jangan spam, dan ikuti aturan forum.',versi:'Bot Care v2.0'};
-  if(cmd==='menu')return r.menu=botMenuText(forum),r.menu;
-  if(r[cmd])return r[cmd];
+  const basic={
+    help:'Gunakan #menu untuk melihat semua 51 perintah Bot Care.',
+    ping:'Pong! Bot Care aktif ✓',waktu:`Sekarang pukul ${now.toLocaleTimeString('id-ID')}.`,
+    tanggal:now.toLocaleDateString('id-ID',{weekday:'long',year:'numeric',month:'long',day:'numeric'}),
+    info:`Forum: ${forum.name||'Forum'}\nAnggota: ${members}/${max||'∞'}\nRole kamu: ${botRoleLabel()}`,
+    forum:`Forum “${forum.name||'Forum'}” sedang dibuka.`,owner:forum.ownerId===currentUser.uid?'Kamu adalah owner forum.':`Forum dimiliki UID: ${forum.ownerId}`,
+    anggota:`Jumlah anggota: ${members}`,kapasitas:`Kapasitas: ${max||'tanpa batas'}`,sisa:max?`Sisa slot: ${Math.max(0,max-members)}`:'Tidak dibatasi',
+    status:forum.banned?'Forum dibanned.':premiumUntilMillis(forum.suspendedUntil)>Date.now()?`Forum disuspend sampai ${new Date(premiumUntilMillis(forum.suspendedUntil)).toLocaleString('id-ID')}.`:'Forum aktif.',
+    mode:forum.ownerOnly?'Hanya owner yang dapat mengirim chat.':'Semua anggota dapat mengirim chat.',kode:`Secret code: ${forum.secretCode||'tidak tersedia'}`,
+    bot:botActiveFor(forum)?`Bot Care aktif sampai ${new Date(premiumUntilMillis(forum.botCare.expiresAt)).toLocaleString('id-ID')}.`:'Bot Care tidak aktif.',
+    premium:'Premium: custom secret code, translator sandi, dan kapasitas sampai 400 anggota.',profil:`Nama: ${profile.displayName}\nUsername: @${profile.username}`,
+    id:`UID kamu: ${currentUser.uid}`,aturan:'Hormati anggota lain, jangan spam, dan ikuti aturan forum.',versi:'Bot Care v3.0',
+    uptime:`Bot Care sudah berjalan sekitar ${Math.floor((Date.now()-BOT_START_TIME)/1000)} detik.`
+  };
+  if(cmd==='menu')return basic.menu=botMenuText(forum),basic.menu;
+  if(basic[cmd])return basic[cmd];
   if(cmd==='random')return `Angka acak: ${Math.floor(Math.random()*100000)+1}`;
   if(cmd==='angka')return arg?encodeA1Z26(arg):'Format: #angka Halo';
   if(cmd==='hitung')return arg?decodeFormula(arg):'Format: #hitung 12+5';
@@ -416,9 +434,27 @@ function botReply(command,forum){
   if(cmd==='bin')return arg?encodeBinary(arg):'Format: #bin Halo';
   if(cmd==='base64')return arg?encodeBase64(arg):'Format: #base64 Halo';
   if(cmd==='rot13')return arg?rot13(arg):'Format: #rot13 Halo';
-  if(cmd==='givepremium'||cmd==='kick'||cmd==='hapuspesan'||cmd==='sensor')return `Perintah ${parsed.prefix}${cmd} sedang diproses sesuai hak akses.`;
-  if(cmd==='mode')return 'Gunakan #mode on atau #mode off.';
-  if(cmd==='quote'){const q=['Tetap tenang dan lanjutkan.','Kode rahasia tetap aman.','Satu forum, satu ruang untuk berbagi.'];return q[Math.floor(Math.random()*q.length)]}
+  if(cmd==='quote'){const q=['Tetap tenang dan lanjutkan.','Kode rahasia tetap aman.','Satu forum, satu ruang untuk berbagi.','Jangan lupa istirahat sebentar.'];return q[Math.floor(Math.random()*q.length)]}
+  if(cmd==='dadu'){const maxN=Math.max(2,Math.min(1000,Number(arg)||6));return `🎲 Dadu 1-${maxN}: ${Math.floor(Math.random()*maxN)+1}`;}
+  if(cmd==='koin')return Math.random()<.5?'🪙 Koin: HEADS':'🪙 Koin: TAILS';
+  if(cmd==='suit'){const pick=String(arg||'').toLowerCase();const choices=['batu','kertas','gunting'];if(!choices.includes(pick))return 'Format: #suit batu/kertas/gunting';const bot=choices[Math.floor(Math.random()*3)];const win=(pick==='batu'&&bot==='gunting')||(pick==='kertas'&&bot==='batu')||(pick==='gunting'&&bot==='kertas');return `🎮 Kamu: ${pick} • Bot: ${bot}\n${pick===bot?'Seri 🤝':win?'Kamu menang! 🎉':'Bot menang 😄'}`;}
+  if(cmd==='8ball'){const q=['Bisa jadi.','Kemungkinan besar.','Belum tentu.','Coba lagi nanti.','Ya.','Tidak.','Tanda-tandanya positif.','Jawabannya masih samar.'];return `🎱 ${q[Math.floor(Math.random()*q.length)]}${arg?`\nPertanyaan: ${arg}`:''}`;}
+  if(cmd==='tebakangka'){
+    const key=`${forum.id}:${currentUser.uid}`;let state=botGameState.get(key);
+    if(!state||!arg){state={answer:Math.floor(Math.random()*100)+1,tries:0};botGameState.set(key,state);return '🎯 Game dimulai! Aku memilih angka 1–100. Gunakan #tebakangka 50 untuk menebak.';}
+    const guess=Number(arg);if(!Number.isInteger(guess)||guess<1||guess>100)return 'Masukkan angka bulat 1–100.';state.tries++;if(guess===state.answer){const tries=state.tries;botGameState.delete(key);return `🎉 Benar! Angkanya ${guess}. Kamu menang dalam ${tries} percobaan.`;}return guess<state.answer?`⬆️ Terlalu kecil. Percobaan ${state.tries}.`:`⬇️ Terlalu besar. Percobaan ${state.tries}.`;
+  }
+  if(cmd==='trivia'){const qs=[['Planet terbesar di tata surya?','Jupiter'],['Ibukota Indonesia?','Jakarta'],['Bahasa markup halaman web yang paling umum?','HTML'],['Berapa sisi segitiga?','3']];const q=qs[Math.floor(Math.random()*qs.length)];return `🧠 Trivia: ${q[0]}\nJawaban: ${q[1]}`;}
+  if(cmd==='faktorial'){const n=Number(arg);if(!Number.isInteger(n)||n<0||n>170)return 'Format: #faktorial 5 (0–170).';let r=1;for(let i=2;i<=n;i++)r*=i;return `${n}! = ${r}`;}
+  if(cmd==='prima'){const n=Number(arg);if(!Number.isInteger(n)||n<2)return 'Format: #prima 17';let p=true;for(let i=2;i<=Math.sqrt(n);i++)if(n%i===0){p=false;break}return `${n} ${p?'adalah':'bukan'} bilangan prima.`;}
+  if(cmd==='ganjilgenap'){const n=Number(arg);if(!Number.isFinite(n))return 'Format: #ganjilgenap 12';return `${n} adalah ${Math.abs(n%2)===1?'ganjil':'genap'}.`;}
+  if(cmd==='balik')return arg?`↩ ${[...arg].reverse().join('')}`:'Format: #balik Secret Forum';
+  if(cmd==='kapital')return arg?arg.toUpperCase():'Format: #kapital halo';
+  if(cmd==='kecil')return arg?arg.toLowerCase():'Format: #kecil HALO';
+  if(cmd==='hitungkata'){const words=arg.trim()?arg.trim().split(/\\s+/).length:0;return `📝 ${words} kata • ${arg.length} karakter.`;}
+  if(cmd==='emoji')return arg?`✨ ${arg} 😎🔥💎`:'Format: #emoji teks';
+  if(cmd==='ascii')return arg?`ASCII: ${[...arg].map(c=>c.charCodeAt(0)).join(' ')}`:'Format: #ascii Halo';
+  if(cmd==='rawatforum'||cmd==='sensor'||cmd==='kick'||cmd==='hapuspesan'||cmd==='slowmode'||cmd==='lockdown')return `Perintah ${parsed.prefix}${cmd} sedang diproses sesuai hak akses.`;
   return `Perintah ${parsed.prefix}${cmd||''} belum dikenal. Ketik #menu.`;
 }
 function pushLocalBotReply(forumId,text,meta={}){const arr=localBotReplies.get(forumId)||[];arr.push({text,createdAt:new Date(),imageUrl:meta.imageUrl||""});if(arr.length>20)arr.shift();localBotReplies.set(forumId,arr);const box=$("messages");if(!box)return;const image=meta.imageUrl?`<img class="bot-menu-image" src="${esc(meta.imageUrl)}" alt="Menu Bot Care" loading="lazy">`:"";box.insertAdjacentHTML('beforeend',`<div class="msg bot-msg"><div class="msg-head"><div class="msg-name">Bot Care <span class="bot-badge">BOT</span></div></div>${image}<div class="msg-text">${esc(text).replace(/\n/g,'<br>')}</div><div class="msg-time">${new Date().toLocaleString('id-ID')}</div></div>`);box.scrollTop=box.scrollHeight;}
@@ -463,7 +499,51 @@ async function executeBotCommand(command,forum,messageId){
     const on=/^(on|aktif)$/i.test(arg),off=/^(off|mati)$/i.test(arg);if(!on&&!off)return 'Format: #sensor on atau #sensor off';
     await updateDoc(doc(db,'forums',forum.id),{profanityFilter:on}); activeForum.profanityFilter=on; return on?'🛡 Sensor kata kasar aktif.':'Sensor kata kasar dinonaktifkan.';
   }
+  if(cmd==='rawatforum'){
+    if(!management)return '⛔ Hanya owner/Admin/Author yang dapat mengaktifkan Rawat Forum.';
+    const on=/^(on|aktif)$/i.test(arg),off=/^(off|mati)$/i.test(arg); if(!on&&!off)return 'Format: #rawatforum on atau #rawatforum off';
+    const current=activeForum.botCare||{};
+    await updateDoc(doc(db,'forums',forum.id),{botCare:{...current,enabled:true,autoCare:on,profanityFilter:on,name:'Bot Care',botId:'BOT_CARE',expiresAt:current.expiresAt||new Date(Date.now()+3*86400000)}});
+    activeForum.botCare={...current,enabled:true,autoCare:on,profanityFilter:on,name:'Bot Care',botId:'BOT_CARE',expiresAt:current.expiresAt||new Date(Date.now()+3*86400000)}; activeForum.profanityFilter=on;
+    if(on) await runBotAutoCare(activeForum);
+    await logActivity('bot_rawatforum',`${on?'Mengaktifkan':'Menonaktifkan'} Rawat Forum di “${forum.name||'Forum'}”`,{forumId:forum.id,enabled:on});
+    return on?'🛡️ Rawat Forum AKTIF. Sensor kata terlarang dan pemeriksaan otomatis berjalan.':'🔓 Rawat Forum dinonaktifkan.';
+  }
+  if(cmd==='slowmode'){
+    if(!management)return '⛔ Hanya owner/Admin/Author yang dapat mengatur slowmode.';
+    const off=/^(off|mati|0)$/i.test(arg), sec=Math.max(0,Math.min(3600,Number(arg)||0)); if(!off&&sec<1)return 'Format: #slowmode 10 atau #slowmode off';
+    const current=activeForum.botCare||{}; await updateDoc(doc(db,'forums',forum.id),{botCare:{...current,slowmodeSec:off?0:sec}}); activeForum.botCare={...current,slowmodeSec:off?0:sec};
+    return off?'⏱️ Slowmode dimatikan.':`⏱️ Slowmode ${sec} detik aktif.`;
+  }
+  if(cmd==='lockdown'){
+    if(!management)return '⛔ Hanya owner/Admin/Author yang dapat lockdown.';
+    const on=/^(on|aktif)$/i.test(arg),off=/^(off|mati)$/i.test(arg); if(!on&&!off)return 'Format: #lockdown on atau #lockdown off';
+    await updateDoc(doc(db,'forums',forum.id),{ownerOnly:on}); activeForum.ownerOnly=on;
+    return on?'🔒 Lockdown aktif. Hanya owner/Admin/Author dapat mengirim chat.':'🔓 Lockdown dinonaktifkan.';
+  }
   return null;
+}
+
+async function runBotAutoCare(forum){
+  if(!botActiveFor(forum) || !forum?.botCare?.autoCare || !canAdmin()) return;
+  try{
+    const snap=await getDocs(query(collection(db,'forums',forum.id,'messages'),orderBy('createdAt','desc'),limit(50)));
+    const recent=snap.docs.filter(d=>(d.data().createdAt?.toMillis?.()||0)>=Date.now()-15*60*1000);
+    const kicked=new Set();
+    for(const d of recent){
+      const m=d.data();
+      if(!m.text || !containsProfanity(m.text) || kicked.has(m.uid) || m.uid===forum.ownerId || m.isAdmin===true || m.isAuthor===true) continue;
+      kicked.add(m.uid);
+      const userRef=doc(db,'users',m.uid), userSnap=await getDoc(userRef); const u=userSnap.exists()?userSnap.data():{};
+      await runTransaction(db,async tx=>{
+        const ref=doc(db,'forums',forum.id), fs=await tx.get(ref); if(!fs.exists())return;
+        const data=fs.data(), members=data.memberIds||[]; if(members.includes(m.uid)) tx.update(ref,{memberIds:members.filter(x=>x!==m.uid)});
+        tx.delete(doc(db,'forums',forum.id,'members',m.uid)); tx.delete(d.ref);
+      });
+      await logActivity('bot_auto_kick',`Bot Care mengeluarkan @${u.username||m.uid} karena terdeteksi konten yang membahayakan forum`,{forumId:forum.id,targetUid:m.uid,reason:'profanity'});
+      pushLocalBotReply(forum.id,`🛡️ Bot Care: @${u.username||m.displayName||'User'} dikeluarkan karena terdeteksi menggunakan kata yang dilarang. Alasan: menjaga keamanan forum.`);
+    }
+  }catch(e){console.warn('Bot auto care:',e);}
 }
 
 async function configureBot(code,days,remove=false){if(!canAdmin())return toast('Hanya Admin/Author yang dapat mengelola Bot Care.');try{const cs=await getDoc(doc(db,'forumCodes',code.trim()));if(!cs.exists())throw new Error('Secret code forum tidak ditemukan.');const forumId=cs.data().forumId,ref=doc(db,'forums',forumId),fs=await getDoc(ref);if(!fs.exists())throw new Error('Forum tidak ditemukan.');if(remove){await updateDoc(ref,{botCare:null});await logActivity('bot_removed',`Mengeluarkan Bot Care dari forum “${fs.data().name||'Forum'}”`,{forumId});toast('Bot Care dikeluarkan dari forum.');return}const n=Math.max(1,Math.min(3650,Number(days)||3));const expires=new Date(Date.now()+n*86400000);await updateDoc(ref,{botCare:{enabled:true,name:'Bot Care',botId:'BOT_CARE',expiresAt:expires,addedBy:currentUser.uid,addedRole:actorRole()}});await logActivity('bot_added',`Memasukkan Bot Care ke forum “${fs.data().name||'Forum'}” selama ${n} hari`,{forumId,days:n});toast(`Bot Care aktif ${n} hari.`)}catch(e){toast(e.message.replace('Firebase: ',''))}}
@@ -476,7 +556,8 @@ function openForum(id,data){
   const su=premiumUntilMillis(data.suspendedUntil);
   if(!canAdmin() && su>Date.now())return toast("Forum ini sedang disuspend sampai "+new Date(su).toLocaleString("id-ID")+".",7000);
   activeForum={id,...data};
-  if(botExpiryTimer){clearTimeout(botExpiryTimer);botExpiryTimer=null;} if(activeForum.botCare?.enabled){const remain=premiumUntilMillis(activeForum.botCare.expiresAt)-Date.now();if(remain>0&&canAdmin())botExpiryTimer=setTimeout(()=>updateDoc(doc(db,"forums",id),{botCare:null}).then(()=>toast("Masa Bot Care berakhir. Bot otomatis dikeluarkan.")).catch(()=>{}),remain);else if(remain<=0&&canAdmin())updateDoc(doc(db,"forums",id),{botCare:null}).catch(()=>{});}
+  const botButton=$("botMenuBtn"); if(botButton)botButton.classList.toggle("hidden",!botActiveFor(activeForum));
+  if(botExpiryTimer){clearTimeout(botExpiryTimer);botExpiryTimer=null;} if(activeForum.botCare?.enabled){const remain=premiumUntilMillis(activeForum.botCare.expiresAt)-Date.now();if(remain>0&&canAdmin())botExpiryTimer=setTimeout(()=>updateDoc(doc(db,"forums",id),{botCare:null}).then(()=>{if($("botMenuBtn"))$("botMenuBtn").classList.add("hidden");toast("Masa Bot Care berakhir. Bot otomatis dikeluarkan.")}).catch(()=>{}),remain);else if(remain<=0&&canAdmin())updateDoc(doc(db,"forums",id),{botCare:null}).catch(()=>{});}
   showPage("forum");
   $("activeForumName").textContent=data.name;
   $("activeForumMeta").textContent=`${(data.memberIds||[]).filter(x=>x!=="BOT_CARE").length}/${data.maxMembers||"∞"} anggota • kode ${data.secretCode||"kode belum tersedia"}${botActiveFor(data)?" • 🤖 Bot Care aktif":""}`;
@@ -565,7 +646,7 @@ function openForum(id,data){
       s.docs.forEach(d=>{const m=d.data();if(typeof m.text==='string'&&containsProfanity(m.text)){deleteDoc(d.ref).catch(()=>{});}});
     }
     const lr=localBotReplies.get(id)||[]; if(lr.length) box.insertAdjacentHTML("beforeend",lr.map(r=>`<div class="msg bot-msg"><div class="msg-head"><div class="msg-name">Bot Care <span class="bot-badge">BOT</span></div></div>${r.imageUrl?`<img class="bot-menu-image" src="${esc(r.imageUrl)}" alt="Menu Bot Care" loading="lazy">`:""}<div class="msg-text">${esc(r.text).replace(/\n/g,"<br>")}</div><div class="msg-time">${r.createdAt.toLocaleString("id-ID")}</div></div>`).join(""));
-    if(botActiveFor(activeForum)){const cutoff=Date.now()-10*60*1000;s.docs.forEach(d=>{const m=d.data(),created=m.createdAt?.toMillis?.()||0;if(typeof m.text==='string'&&normalizeBotCommand(m.text)&&created>=cutoff&&!botHandledCommands.has(d.id)){botHandledCommands.add(d.id);setTimeout(async()=>{try{const result=await executeBotCommand(m.text,activeForum,d.id);const text=result||botReply(m.text,activeForum)||'';const parsed=normalizeBotCommand(m.text);const imageUrl=parsed?.cmd==='menu'?botMenuImageUrl(botMenuConfig.imageUrl):'';pushLocalBotReply(id,text,{imageUrl});}catch(err){pushLocalBotReply(id,`⚠️ ${err.message.replace('Firebase: ','')}`);}},220);}});}
+    if(botActiveFor(activeForum)){runBotAutoCare(activeForum);const cutoff=Date.now()-10*60*1000;s.docs.forEach(d=>{const m=d.data(),created=m.createdAt?.toMillis?.()||0;if(typeof m.text==='string'&&normalizeBotCommand(m.text)&&created>=cutoff&&!botHandledCommands.has(d.id)){botHandledCommands.add(d.id);setTimeout(async()=>{try{const result=await executeBotCommand(m.text,activeForum,d.id);const text=result||botReply(m.text,activeForum)||'';const parsed=normalizeBotCommand(m.text);const imageUrl=parsed?.cmd==='menu'?botMenuImageUrl(botMenuConfig.imageUrl):'';pushLocalBotReply(id,text,{imageUrl});}catch(err){pushLocalBotReply(id,`⚠️ ${err.message.replace('Firebase: ','')}`);}},220);}});}
     box.querySelectorAll("[data-read-more]").forEach(btn=>btn.onclick=()=>{
       const msgEl=btn.closest(".msg")?.querySelector(".msg-text");
       const full=messageTextCache.get(btn.dataset.readMore)||"";
@@ -613,6 +694,19 @@ function openForum(id,data){
     toast("Gagal memuat chat: "+err.message.replace("Firebase: ",""));
   });
 }
+
+function setupBotMenuUI(){
+  const btn=$("botMenuBtn"), modal=$("botMenuModal"), close=$("botMenuClose"), status=$("botMenuStatus");
+  if(!btn||!modal)return;
+  btn.onclick=()=>{
+    if(!activeForum||!botActiveFor(activeForum))return toast("Bot Care belum aktif di forum ini.");
+    if(status)status.textContent=`Aktif sampai ${new Date(premiumUntilMillis(activeForum.botCare.expiresAt)).toLocaleString("id-ID")}`;
+    modal.classList.remove("hidden");
+  };
+  close?.addEventListener("click",()=>modal.classList.add("hidden"));
+  modal.addEventListener("click",e=>{if(e.target===modal)modal.classList.add("hidden")});
+}
+setupBotMenuUI();
 const MORSE={".-":"A","-...":"B","-.-.":"C","-..":"D",".":"E","..-.":"F","--.":"G","....":"H","..":"I",".---":"J","-.-":"K",".-..":"L","--":"M","-.":"N","---":"O",".--.":"P","--.-":"Q",".-.":"R","...":"S","-":"T","..-":"U","...-":"V",".--":"W","-..-":"X","-.--":"Y","--..":"Z","-----":"0",".----":"1","..---":"2","...--":"3","....-":"4",".....":"5","-....":"6","--...":"7","---..":"8","----.":"9",".-.-.-":".","--..--":",","..--..":"?","-.-.--":"!","-....-":"-",".-..-.":"'","-.--.":"(","-.--.-":")"};
 function decodeMorse(v){
   const x=v.trim();
@@ -688,6 +782,7 @@ $("messageForm").onsubmit=async e=>{
   const input=$("messageInput"), fileInput=$("messageAttachment"), text=input.value.trim(), file=fileInput?.files?.[0]||null;
   if(!activeForum)return;
   if(activeForum.ownerOnly===true && activeForum.ownerId!==currentUser.uid && !canAdmin())return toast("Hanya owner yang dapat mengirim pesan.");
+  const slowSec=Number(activeForum.botCare?.slowmodeSec||0); if(slowSec>0 && !canAdmin() && currentUser.uid!==activeForum.ownerId){ const last=Number(localStorage.getItem('sf_slow_'+activeForum.id+'_'+currentUser.uid)||0); const wait=slowSec-Math.floor((Date.now()-last)/1000); if(wait>0)return toast(`Slowmode aktif. Tunggu ${wait} detik.`); localStorage.setItem('sf_slow_'+activeForum.id+'_'+currentUser.uid,String(Date.now())); }
   if(!text && !file)return;
   if(text.length>MAX_MESSAGE_LENGTH)return toast("Pesan terlalu panjang. Maksimal 100.000 karakter.");
   if(file && file.size>MAX_ATTACHMENT_SIZE)return toast("Ukuran file maksimal 100 MB.");

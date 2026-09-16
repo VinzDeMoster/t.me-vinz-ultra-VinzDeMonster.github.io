@@ -33,3 +33,6 @@ Versi ini memakai Cloudinary untuk foto/video/file agar tidak memakai Firebase S
 6. Upload/deploy ulang website.
 
 Upload dilakukan langsung dari browser ke Cloudinary. Jangan memasukkan API Secret Cloudinary ke `app.js`.
+
+## Bot Care v3
+Bot Care menyediakan 51 perintah untuk informasi, utilitas, game, dan perawatan forum. Perintah manajemen seperti `#rawatforum on`, `#sensor on`, `#kick @username`, `#hapuspesan terakhir`, `#slowmode 10`, dan `#lockdown on` mengikuti hak akses Owner/Admin/Author. `#rawatforum on` menjalankan pemeriksaan otomatis terhadap kata terlarang pada pesan dan dapat mengeluarkan akun biasa/Premium yang terdeteksi melanggar; Owner Forum tetap dilindungi.
