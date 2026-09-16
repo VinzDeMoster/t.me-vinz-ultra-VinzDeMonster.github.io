@@ -46,7 +46,6 @@
         <button class="nav" data-page="settings">⚙ <span>Pengaturan</span></button>
         <button class="nav" data-page="inbox">✉ <span>Inbox</span><span id="inboxBadge" class="inbox-badge hidden">0</span></button>
         <button class="nav" data-page="contact">✦ <span>Premium</span></button>
-        <button class="nav" data-page="bot-rental">🤖 <span>Sewa Bot Care</span></button>
         <button class="nav hidden" id="adminNav" data-page="admin">♛ <span>Admin</span></button>
         <button class="nav hidden" id="authorNav" data-page="author">👑 <span>Author</span></button>
         <button class="nav hidden" id="activityNav" data-page="activity">◷ <span>Aktivitas</span></button>
@@ -110,17 +109,6 @@
             <div id="activationStatus" class="notice hidden"></div>
           </div>
           <hr>
-          <div class="activation-card bot-rental-settings">
-            <h3>🤖 Bot Care</h3>
-            <p class="muted">Masukkan kode aktivasi Bot Care yang dikirim Admin ke Inbox, lalu secret code forum tujuan. Bot Care dapat dipasang ke beberapa forum sesuai paket.</p>
-            <form id="botInstallForm">
-              <label>Kode aktivasi Bot Care<input id="botActivationInput" maxlength="20" minlength="20" placeholder="20 karakter kode Bot Care" autocomplete="off" required></label>
-              <label>Secret code forum<input id="botForumCodeInput" placeholder="Secret code forum tujuan" required></label>
-              <button class="primary wide" type="submit">Aktifkan & Pasang Bot Care</button>
-            </form>
-            <div id="botRentalStatus"><div class="notice">Belum dimuat.</div></div>
-          </div>
-          <hr>
           <form id="passwordForm">
             <h3>Ganti password</h3>
             <label>Password baru<input id="newPassword" type="password" minlength="6" required></label>
@@ -152,19 +140,6 @@
         </div>
       </section>
 
-      <section id="page-bot-rental" class="page hidden">
-        <div class="form-card glass narrow">
-          <span class="eyebrow">BOT CARE</span><h2>🤖 Sewa Bot Care</h2>
-          <p class="muted">Sewa Bot Care, lalu setelah pembayaran diverifikasi Admin kamu akan menerima kode aktivasi di Inbox.</p>
-          <div class="premium-plans">
-            <div class="premium-plan"><h3>2 Hari</h3><strong>Rp6.000</strong><p class="muted">Bot Care • maksimal 1 forum.</p><button class="primary wide" data-buy-bot-plan="2 hari">Beli Sekarang</button></div>
-            <div class="premium-plan"><h3>1 Minggu</h3><strong>Rp21.000</strong><p class="muted">Bot Care • maksimal 30 forum.</p><button class="primary wide" data-buy-bot-plan="1 minggu">Beli Sekarang</button></div>
-            <div class="premium-plan"><h3>1 Bulan</h3><strong>Rp39.500</strong><p class="muted">Bot Care • maksimal 30 forum.</p><button class="primary wide" data-buy-bot-plan="1 bulan">Beli Sekarang</button></div>
-            <div class="premium-plan"><h3>1 Tahun</h3><strong>Rp299.000</strong><p class="muted">Bot Care • maksimal 30 forum.</p><button class="primary wide" data-buy-bot-plan="1 tahun">Beli Sekarang</button></div>
-          </div>
-        </div>
-      </section>
-
       <section id="page-payment" class="page hidden">
         <div class="form-card glass narrow">
           <span class="eyebrow">PAYMENT</span><h2>Pembayaran Premium</h2>
@@ -173,17 +148,6 @@
           <button id="paidBtn" class="primary wide">Saya Sudah Bayar</button>
           <button class="secondary wide" data-page-go="contact">Kembali</button>
           <div id="paymentLoading" class="notice hidden">Memproses pembayaran…</div>
-        </div>
-      </section>
-
-      <section id="page-bot-payment" class="page hidden">
-        <div class="form-card glass narrow">
-          <span class="eyebrow">BOT CARE • PAYMENT</span><h2>Pembayaran Sewa Bot Care</h2>
-          <p id="botPaymentPlanText" class="muted">Paket dipilih.</p>
-          <div class="payment-box"><div class="qr-placeholder"><img src="qrcode.png" alt="QR Code pembayaran" class="payment-qr"><small>Scan QR untuk pembayaran</small></div><div class="notice"><b>Nomor rekening</b><br><span>0000 0000 0000</span><br><span class="muted">Bank / QRIS</span></div></div>
-          <button id="botPaidBtn" class="primary wide">Saya Sudah Bayar</button>
-          <button class="secondary wide" data-page-go="bot-rental">Kembali</button>
-          <div id="botPaymentLoading" class="notice hidden">Memproses pembayaran…</div>
         </div>
       </section>
 
