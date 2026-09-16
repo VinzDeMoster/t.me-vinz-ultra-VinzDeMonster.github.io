@@ -87,103 +87,6 @@ async function uploadCloudinaryFile(file, folder, maxBytes=10*1024*1024){
 }
 const emailForUsername = u => `${u.trim().toLowerCase().replace(/[^a-z0-9._-]/g,"_")}@secretforum.local`;
 
-
-/* v27: multi-language interface. Stored locally so the choice survives login/logout. */
-const LANGUAGE_KEY = "secret_forum_language";
-const LANGUAGES = {id:"Indonesia",en:"English",ja:"日本語",zh:"中文",es:"Español",fr:"Français",ko:"한국어"};
-const I18N = {
-  "Login": {en:"Login",ja:"ログイン",zh:"登录",es:"Iniciar sesión",fr:"Connexion",ko:"로그인"},
-  "Daftar": {en:"Register",ja:"登録",zh:"注册",es:"Registrarse",fr:"Inscription",ko:"회원가입"},
-  "Masuk": {en:"Sign in",ja:"ログイン",zh:"登录",es:"Entrar",fr:"Se connecter",ko:"로그인"},
-  "Buat akun": {en:"Create account",ja:"アカウントを作成",zh:"创建账号",es:"Crear cuenta",fr:"Créer un compte",ko:"계정 만들기"},
-  "Username": {en:"Username",ja:"ユーザー名",zh:"用户名",es:"Nombre de usuario",fr:"Nom d'utilisateur",ko:"사용자 이름"},
-  "Password": {en:"Password",ja:"パスワード",zh:"密码",es:"Contraseña",fr:"Mot de passe",ko:"비밀번호"},
-  "Nama tampilan": {en:"Display name",ja:"表示名",zh:"显示名称",es:"Nombre visible",fr:"Nom affiché",ko:"표시 이름"},
-  "Nama yang terlihat di forum": {en:"Name shown in the forum",ja:"フォーラムに表示される名前",zh:"论坛中显示的名称",es:"Nombre mostrado en el foro",fr:"Nom affiché dans le forum",ko:"포럼에 표시되는 이름"},
-  "Pengaturan": {en:"Settings",ja:"設定",zh:"设置",es:"Configuración",fr:"Paramètres",ko:"설정"},
-  "Beranda": {en:"Home",ja:"ホーム",zh:"首页",es:"Inicio",fr:"Accueil",ko:"홈"},
-  "Bergabung Forum": {en:"Join Forum",ja:"フォーラムに参加",zh:"加入论坛",es:"Unirse al foro",fr:"Rejoindre le forum",ko:"포럼 참여"},
-  "Buat Forum": {en:"Create Forum",ja:"フォーラム作成",zh:"创建论坛",es:"Crear foro",fr:"Créer un forum",ko:"포럼 만들기"},
-  "Inbox": {en:"Inbox",ja:"受信トレイ",zh:"收件箱",es:"Bandeja de entrada",fr:"Boîte de réception",ko:"받은편지함"},
-  "Premium": {en:"Premium",ja:"プレミアム",zh:"高级会员",es:"Premium",fr:"Premium",ko:"프리미엄"},
-  "Sewa Bot Care": {en:"Rent Bot Care",ja:"Bot Careをレンタル",zh:"租用 Bot Care",es:"Alquilar Bot Care",fr:"Louer Bot Care",ko:"Bot Care 대여"},
-  "Admin": {en:"Admin",ja:"管理者",zh:"管理员",es:"Administrador",fr:"Administrateur",ko:"관리자"},
-  "Author": {en:"Author",ja:"Author",zh:"Author",es:"Author",fr:"Author",ko:"Author"},
-  "Aktivitas": {en:"Activity",ja:"アクティビティ",zh:"活动",es:"Actividad",fr:"Activité",ko:"활동"},
-  "Keluar": {en:"Log out",ja:"ログアウト",zh:"退出",es:"Cerrar sesión",fr:"Se déconnecter",ko:"로그아웃"},
-  "Kelola forum rahasiamu.": {en:"Manage your private forums.",ja:"秘密のフォーラムを管理します。",zh:"管理你的私人论坛。",es:"Administra tus foros privados.",fr:"Gérez vos forums privés.",ko:"비공개 포럼을 관리하세요."},
-  "Kelola akun dan keamanan.": {en:"Manage your account and security.",ja:"アカウントとセキュリティを管理します。",zh:"管理账号和安全。",es:"Administra tu cuenta y seguridad.",fr:"Gérez votre compte et votre sécurité.",ko:"계정과 보안을 관리하세요."},
-  "Informasi dan pesan penting akun.": {en:"Account information and important messages.",ja:"アカウント情報と重要なメッセージ。",zh:"账号信息和重要消息。",es:"Información y mensajes importantes de la cuenta.",fr:"Informations du compte et messages importants.",ko:"계정 정보와 중요한 메시지입니다."},
-  "Pilih paket Premium.": {en:"Choose a Premium plan.",ja:"プレミアムプランを選択してください。",zh:"选择高级会员套餐。",es:"Elige un plan Premium.",fr:"Choisissez un forfait Premium.",ko:"프리미엄 요금제를 선택하세요."},
-  "Masukkan secret code untuk bergabung.": {en:"Enter the secret code to join.",ja:"参加するにはシークレットコードを入力してください。",zh:"输入秘密代码加入。",es:"Introduce el código secreto para unirte.",fr:"Saisissez le code secret pour rejoindre.",ko:"참여하려면 비밀 코드를 입력하세요."},
-  "Buat ruang privat baru.": {en:"Create a new private space.",ja:"新しいプライベートスペースを作成します。",zh:"创建新的私人空间。",es:"Crea un nuevo espacio privado.",fr:"Créez un nouvel espace privé.",ko:"새 비공개 공간을 만드세요."},
-  "Forum rahasia, sederhana, dan nyaman.": {en:"A private, simple, comfortable forum.",ja:"シンプルで快適な秘密のフォーラム。",zh:"简单、舒适的私人论坛。",es:"Un foro privado, sencillo y cómodo.",fr:"Un forum privé, simple et confortable.",ko:"간단하고 편안한 비공개 포럼."},
-  "Buat forum, bagikan secret code, lalu ngobrol hanya dengan nama tampilan.": {en:"Create a forum, share the secret code, then chat using display names.",ja:"フォーラムを作成し、シークレットコードを共有して、表示名だけでチャットしましょう。",zh:"创建论坛、分享秘密代码，然后使用显示名称聊天。",es:"Crea un foro, comparte el código secreto y chatea con nombres visibles.",fr:"Créez un forum, partagez le code secret et discutez avec les noms affichés.",ko:"포럼을 만들고 비밀 코드를 공유한 뒤 표시 이름으로 채팅하세요."},
-  "Forum saya": {en:"My forums",ja:"マイフォーラム",zh:"我的论坛",es:"Mis foros",fr:"Mes forums",ko:"내 포럼"},
-  "Gabung Forum": {en:"Join Forum",ja:"フォーラムに参加",zh:"加入论坛",es:"Unirse al foro",fr:"Rejoindre le forum",ko:"포럼 참여"},
-  "Masuk ke forum": {en:"Join a forum",ja:"フォーラムに入る",zh:"进入论坛",es:"Entrar al foro",fr:"Rejoindre un forum",ko:"포럼 들어가기"},
-  "Masukkan secret code yang kamu dapat dari anggota/admin forum.": {en:"Enter the secret code you received from a forum member/admin.",ja:"フォーラムのメンバーまたは管理者から受け取ったシークレットコードを入力してください。",zh:"输入你从论坛成员/管理员处获得的秘密代码。",es:"Introduce el código secreto recibido de un miembro/administrador.",fr:"Saisissez le code secret reçu d'un membre/administrateur.",ko:"포럼 멤버/관리자에게 받은 비밀 코드를 입력하세요."},
-  "Secret code": {en:"Secret code",ja:"シークレットコード",zh:"秘密代码",es:"Código secreto",fr:"Code secret",ko:"비밀 코드"},
-  "Bergabung": {en:"Join",ja:"参加",zh:"加入",es:"Unirse",fr:"Rejoindre",ko:"참여"},
-  "Buat forum baru": {en:"Create a new forum",ja:"新しいフォーラムを作成",zh:"创建新论坛",es:"Crear un nuevo foro",fr:"Créer un nouveau forum",ko:"새 포럼 만들기"},
-  "Nama forum": {en:"Forum name",ja:"フォーラム名",zh:"论坛名称",es:"Nombre del foro",fr:"Nom du forum",ko:"포럼 이름"},
-  "Jumlah anggota": {en:"Member limit",ja:"メンバー数",zh:"成员上限",es:"Límite de miembros",fr:"Limite de membres",ko:"회원 수"},
-  "Akun biasa: batas maksimal 20 anggota.": {en:"Regular account: maximum 20 members.",ja:"通常アカウント：最大20人。",zh:"普通账号：最多20名成员。",es:"Cuenta normal: máximo 20 miembros.",fr:"Compte standard : 20 membres maximum.",ko:"일반 계정: 최대 20명."},
-  "Secret code ": {en:"Secret code ",ja:"シークレットコード ",zh:"秘密代码 ",es:"Código secreto ",fr:"Code secret ",ko:"비밀 코드 "},
-  "Kode custom hanya aktif untuk akun Premium. Akun biasa akan mendapatkan kode acak.": {en:"Custom codes are only available to Premium accounts. Regular accounts receive a random code.",ja:"カスタムコードはプレミアムのみ利用できます。通常アカウントにはランダムコードが発行されます。",zh:"自定义代码仅限高级会员。普通账号会获得随机代码。",es:"Los códigos personalizados son solo para Premium. Las cuentas normales reciben un código aleatorio.",fr:"Les codes personnalisés sont réservés au Premium. Les comptes standards reçoivent un code aléatoire.",ko:"사용자 지정 코드는 프리미엄만 사용할 수 있습니다. 일반 계정에는 무작위 코드가 발급됩니다."},
-  "Aktivasi Premium": {en:"Premium Activation",ja:"プレミアム有効化",zh:"高级会员激活",es:"Activación Premium",fr:"Activation Premium",ko:"프리미엄 활성화"},
-  "Aktifkan": {en:"Activate",ja:"有効化",zh:"激活",es:"Activar",fr:"활성화",ko:"활성화"},
-  "Ganti password": {en:"Change password",ja:"パスワード変更",zh:"修改密码",es:"Cambiar contraseña",fr:"Changer le mot de passe",ko:"비밀번호 변경"},
-  "Simpan nama": {en:"Save name",ja:"名前を保存",zh:"保存名称",es:"Guardar nombre",fr:"Enregistrer le nom",ko:"이름 저장"},
-  "Status akun": {en:"Account status",ja:"アカウント状態",zh:"账号状态",es:"Estado de la cuenta",fr:"État du compte",ko:"계정 상태"},
-  "Biasa": {en:"Regular",ja:"通常",zh:"普通",es:"Normal",fr:"Standard",ko:"일반"},
-  "Simpan": {en:"Save",ja:"保存",zh:"保存",es:"Guardar",fr:"Enregistrer",ko:"저장"},
-  "Pilih paket Premium yang kamu inginkan.": {en:"Choose the Premium plan you want.",ja:"希望するプレミアムプランを選択してください。",zh:"选择你想要的高级会员套餐。",es:"Elige el plan Premium que quieras.",fr:"Choisissez le forfait Premium souhaité.",ko:"원하는 프리미엄 요금제를 선택하세요."},
-  "Beli Sekarang": {en:"Buy Now",ja:"今すぐ購入",zh:"立即购买",es:"Comprar ahora",fr:"Acheter maintenant",ko:"지금 구매"},
-  "Saya Sudah Bayar": {en:"I Have Paid",ja:"支払い済み",zh:"我已付款",es:"Ya he pagado",fr:"J'ai payé",ko:"결제했습니다"},
-  "Kembali": {en:"Back",ja:"戻る",zh:"返回",es:"Volver",fr:"Retour",ko:"뒤로"},
-  "Pembayaran Premium": {en:"Premium Payment",ja:"プレミアム決済",zh:"高级会员付款",es:"Pago Premium",fr:"Paiement Premium",ko:"프리미엄 결제"},
-  "Inbox": {en:"Inbox",ja:"受信トレイ",zh:"收件箱",es:"Bandeja de entrada",fr:"Boîte de réception",ko:"받은편지함"},
-  "Kirim ke Inbox": {en:"Send to Inbox",ja:"受信トレイに送信",zh:"发送到收件箱",es:"Enviar a la bandeja",fr:"Envoyer à la boîte",ko:"받은편지함으로 보내기"},
-  "Kirim ke seluruh user": {en:"Send to all users",ja:"全ユーザーに送信",zh:"发送给所有用户",es:"Enviar a todos los usuarios",fr:"Envoyer à tous les utilisateurs",ko:"모든 사용자에게 보내기"},
-  "Kelola user": {en:"Manage users",ja:"ユーザー管理",zh:"管理用户",es:"Gestionar usuarios",fr:"Gérer les utilisateurs",ko:"사용자 관리"},
-  "Moderasi forum": {en:"Forum moderation",ja:"フォーラム管理",zh:"论坛管理",es:"Moderación del foro",fr:"Modération du forum",ko:"포럼 관리"},
-  "Terjemahkan": {en:"Translate",ja:"翻訳",zh:"翻译",es:"Traducir",fr:"Traduire",ko:"번역"},
-  "Kirim": {en:"Send",ja:"送信",zh:"发送",es:"Enviar",fr:"Envoyer",ko:"보내기"},
-  "Tulis pesan...": {en:"Write a message...",ja:"メッセージを入力…",zh:"输入消息…",es:"Escribe un mensaje…",fr:"Écrivez un message…",ko:"메시지를 입력하세요…"},
-  "Salin kode": {en:"Copy code",ja:"コードをコピー",zh:"复制代码",es:"Copiar código",fr:"Copier le code",ko:"코드 복사"},
-  "Keluar forum": {en:"Leave forum",ja:"フォーラムを退出",zh:"退出论坛",es:"Salir del foro",fr:"Quitter le forum",ko:"포럼 나가기"},
-  "Detail forum": {en:"Forum details",ja:"フォーラム詳細",zh:"论坛详情",es:"Detalles del foro",fr:"Détails du forum",ko:"포럼 세부정보"},
-  "Anggota": {en:"Members",ja:"メンバー",zh:"成员",es:"Miembros",fr:"Membres",ko:"회원"},
-  "Aktivitas Website": {en:"Website Activity",ja:"ウェブサイトのアクティビティ",zh:"网站活动",es:"Actividad del sitio",fr:"Activité du site",ko:"웹사이트 활동"},
-  "Pilih bahasa tampilan": {en:"Choose interface language",ja:"表示言語を選択",zh:"选择界面语言",es:"Elige el idioma de la interfaz",fr:"Choisissez la langue de l'interface",ko:"인터페이스 언어 선택"},
-  "Bahasa": {en:"Language",ja:"言語",zh:"语言",es:"Idioma",fr:"Langue",ko:"언어"},
-  "Bahasa tampilan": {en:"Interface language",ja:"表示言語",zh:"界面语言",es:"Idioma de la interfaz",fr:"Langue de l'interface",ko:"인터페이스 언어"}
-};
-function tr(source){ const lang=localStorage.getItem(LANGUAGE_KEY)||"id"; return lang==="id"?source:(I18N[source]?.[lang]||source); }
-function translateDOM(){
-  const lang=localStorage.getItem(LANGUAGE_KEY)||"id";
-  document.documentElement.lang=lang;
-  document.querySelectorAll(".language-select").forEach(s=>s.value=lang);
-  const skip=new Set(["SCRIPT","STYLE","OPTION"]);
-  const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);
-  const nodes=[]; while(walker.nextNode()) nodes.push(walker.currentNode);
-  nodes.forEach(n=>{const p=n.parentElement;if(!p||skip.has(p.tagName)||p.closest(".msg-text,.msg-time,.msg-name,.forum-card,.toast,#messages,[contenteditable=true]"))return;const raw=n.nodeValue;const key=(n.__i18nSource||raw).trim();if(!key)return;if(I18N[key]&&raw.trim()===key){n.__i18nSource=key;const lead=raw.match(/^\s*/)?.[0]||"";const trail=raw.match(/\s*$/)?.[0]||"";n.nodeValue=lead+tr(key)+trail;}else if(n.__i18nSource){const lead=raw.match(/^\s*/)?.[0]||"";const trail=raw.match(/\s*$/)?.[0]||"";n.nodeValue=lead+tr(n.__i18nSource)+trail;}});
-  document.querySelectorAll("[placeholder],[title],[aria-label]").forEach(el=>{
-    for(const attr of ["placeholder","title","aria-label"]){if(!el.hasAttribute(attr))continue;const val=el.getAttribute(attr);const key=el.dataset["i18n"+attr.charAt(0).toUpperCase()+attr.slice(1)]||val;if(I18N[key]){el.dataset["i18n"+attr.charAt(0).toUpperCase()+attr.slice(1)]=key;el.setAttribute(attr,tr(key));}}
-  });
-  const title=document.querySelector("#pageTitle"), subtitle=document.querySelector("#pageSubtitle");
-  if(title&&title.dataset.i18nSource)title.textContent=tr(title.dataset.i18nSource);if(subtitle&&subtitle.dataset.i18nSource)subtitle.textContent=tr(subtitle.dataset.i18nSource);
-}
-function setLanguage(lang){ if(!LANGUAGES[lang])lang="id"; localStorage.setItem(LANGUAGE_KEY,lang); document.querySelectorAll(".language-select").forEach(s=>s.value=lang); translateDOM(); if(typeof showPage==="function"){const active=document.querySelector(".nav.active")?.dataset.page;if(active&&typeof showPage==="function") showPage(active);} setAuthMode?.(authMode||"login"); }
-function initLanguage(){
-  document.querySelectorAll(".language-select").forEach(s=>s.addEventListener("change",()=>setLanguage(s.value)));
-  const lang=localStorage.getItem(LANGUAGE_KEY)||"id";document.querySelectorAll(".language-select").forEach(s=>s.value=lang);
-  const title=document.querySelector("#pageTitle"),subtitle=document.querySelector("#pageSubtitle");if(title)title.dataset.i18nSource=title.textContent;if(subtitle)subtitle.dataset.i18nSource=subtitle.textContent;
-  translateDOM();
-}
-initLanguage();
-
 function updateMemberLimitUI(){
   const input=$("memberLimit"), note=$("memberLimitNote"), code=$("secretCode"), hint=$("premiumHint"), customNote=$("customCodeNote");
   if(!input)return;
@@ -208,16 +111,16 @@ function showPage(name){
   document.querySelectorAll(".page").forEach(x=>x.classList.add("hidden"));
   $("page-"+name)?.classList.remove("hidden");
   document.querySelectorAll(".nav").forEach(x=>x.classList.toggle("active",x.dataset.page===name));
-  const titles={home:["Beranda","Kelola forum rahasiamu."],join:["Bergabung Forum","Masukkan secret code untuk bergabung."],create:["Buat Forum","Buat ruang privat baru."],settings:["Pengaturan","Kelola akun dan keamanan."],inbox:["Inbox","Informasi dan pesan penting akun."],contact:["Premium","Pilih paket Premium."],payment:["Pembayaran Premium","Selesaikan pembayaran Premium."],"bot-rental":["Sewa Bot Care","Sewa Bot Care untuk forum pilihanmu."],"bot-payment":["Pembayaran Bot Care","Selesaikan pembayaran sewa Bot Care."],admin:["Admin Panel","Kelola user, premium, forum, dan Inbox."],author:["Author Panel","Pemilik utama website dan otoritas tertinggi."],activity:["Aktivitas Website","Riwayat tindakan administrasi dan moderasi."],forum:["Forum","Obrolan teks privat."]};
-  $("pageTitle").dataset.i18nSource=titles[name]?.[0]||"Secret Forum"; $("pageSubtitle").dataset.i18nSource=titles[name]?.[1]||""; $("pageTitle").textContent=tr($("pageTitle").dataset.i18nSource); $("pageSubtitle").textContent=tr($("pageSubtitle").dataset.i18nSource);
+  const titles={home:["Beranda","Kelola forum rahasiamu."],join:["Bergabung Forum","Masukkan secret code untuk bergabung."],create:["Buat Forum","Buat ruang privat baru."],settings:["Pengaturan","Kelola akun dan keamanan."],inbox:["Inbox","Informasi dan pesan penting akun."],contact:["Premium","Pilih paket Premium."],payment:["Pembayaran Premium","Selesaikan pembayaran Premium."],admin:["Admin Panel","Kelola user, premium, forum, dan Inbox."],author:["Author Panel","Pemilik utama website dan otoritas tertinggi."],activity:["Aktivitas Website","Riwayat tindakan administrasi dan moderasi."],forum:["Forum","Obrolan teks privat."]};
+  $("pageTitle").textContent=titles[name]?.[0]||"Secret Forum"; $("pageSubtitle").textContent=titles[name]?.[1]||"";
   if(name==="admin" && canAdmin()){ loadAdminForums(); loadSupportRequests(); loadAdsManagement("adminAdsResults"); loadMaintenanceSettings(); loadBotMenuAdminUI(); }
   if(name==="author" && isAuthor()){ loadAuthorPanel(); loadAdsManagement("authorAdsResults"); loadMaintenanceSettings(); loadBotMenuAdminUI(); }
   if(name==="activity" && currentUser) loadPublicActivity();
   if(name==="inbox" && currentUser) loadInbox();
-  if(name==="settings" && currentUser) { loadActivationStatus(); loadBotRentalStatus(); }
+  if(name==="settings" && currentUser) loadActivationStatus();
   if(name==="create") updateMemberLimitUI();
 }
-function setAuthMode(mode){ authMode=mode; document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x.dataset.authTab===mode)); $("displayNameWrap").classList.toggle("hidden",mode!=="register"); $("authSubmit").dataset.i18nSource=mode==="login"?"Masuk":"Buat akun"; $("authSubmit").textContent=tr($("authSubmit").dataset.i18nSource); }
+function setAuthMode(mode){ authMode=mode; document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x.dataset.authTab===mode)); $("displayNameWrap").classList.toggle("hidden",mode!=="register"); $("authSubmit").textContent=mode==="login"?"Masuk":"Buat akun"; }
 function setLoggedInUI(){
   $("authView").classList.add("hidden"); $("appView").classList.remove("hidden");
   $("sidebarName").textContent=profile.displayName; $("sidebarUsername").textContent="@"+profile.username; $("avatar").textContent=(profile.displayName||"?")[0].toUpperCase();
@@ -969,10 +872,6 @@ $("messageInput").addEventListener("input",()=>{
 
 let selectedPremiumPlan=null;
 const PREMIUM_PRICES={"1 minggu":78000,"1 bulan":299000,"1 tahun":710000};
-const BOT_RENTAL_PRICES={"2 hari":6000,"1 minggu":21000,"1 bulan":39500,"1 tahun":299000};
-const BOT_RENTAL_DAYS={"2 hari":2,"1 minggu":7,"1 bulan":30,"1 tahun":365};
-const BOT_RENTAL_MAX_FORUMS={"2 hari":1,"1 minggu":30,"1 bulan":30,"1 tahun":30};
-let selectedBotRentalPlan=null;
 document.querySelectorAll("[data-buy-plan]").forEach(btn=>btn.onclick=()=>{
   selectedPremiumPlan=btn.dataset.buyPlan;
   $("paymentPlanText").textContent=`Paket yang dipilih: Premium ${selectedPremiumPlan} • Rp${(PREMIUM_PRICES[selectedPremiumPlan]||0).toLocaleString("id-ID")}.`;
@@ -994,84 +893,6 @@ $("paidBtn").onclick=async()=>{
     toast(err.message.replace("Firebase: ",""));
   }
 };
-
-
-// ===== Bot Care rental =====
-document.querySelectorAll("[data-buy-bot-plan]").forEach(btn=>btn.onclick=()=>{
-  selectedBotRentalPlan=btn.dataset.buyBotPlan;
-  const price=BOT_RENTAL_PRICES[selectedBotRentalPlan]||0;
-  const days=BOT_RENTAL_DAYS[selectedBotRentalPlan]||0;
-  const maxForums=BOT_RENTAL_MAX_FORUMS[selectedBotRentalPlan]||1;
-  $("botPaymentPlanText").textContent=`Sewa Bot Care ${selectedBotRentalPlan} • Rp${price.toLocaleString("id-ID")} • ${maxForums} forum${maxForums>1?" maksimal":" maksimal"}.`;
-  $("botPaymentLoading")?.classList.add("hidden");
-  showPage("bot-payment");
-});
-$("botPaidBtn")?.addEventListener("click",async()=>{
-  if(!selectedBotRentalPlan||!currentUser)return;
-  const btn=$("botPaidBtn");btn.disabled=true;$("botPaymentLoading").classList.remove("hidden");btn.textContent="Memproses…";
-  try{
-    const days=BOT_RENTAL_DAYS[selectedBotRentalPlan],price=BOT_RENTAL_PRICES[selectedBotRentalPlan],maxForums=BOT_RENTAL_MAX_FORUMS[selectedBotRentalPlan];
-    await addDoc(collection(db,"supportRequests"),{uid:currentUser.uid,username:profile.username,displayName:profile.displayName,type:"bot_rental",plan:selectedBotRentalPlan,price,days,maxForums,status:"waiting_verification",createdAt:serverTimestamp()});
-    await new Promise(r=>setTimeout(r,700));
-    $("botPaymentLoading").textContent="Permintaan sewa Bot Care dikirim untuk verifikasi Admin.";
-    await new Promise(r=>setTimeout(r,800));
-    $("botPaymentLoading").classList.add("hidden");btn.disabled=false;btn.textContent="Saya Sudah Bayar";toast("Permintaan sewa Bot Care dikirim.");showPage("home");
-  }catch(e){$("botPaymentLoading").classList.add("hidden");btn.disabled=false;btn.textContent="Saya Sudah Bayar";toast(e.message.replace("Firebase: ",""));}
-});
-
-async function loadBotRentalStatus(){
-  if(!currentUser)return;
-  const box=$("botRentalStatus"),form=$("botInstallForm");
-  if(!box)return;
-  try{
-    const s=await getDoc(doc(db,"botRentals",currentUser.uid));
-    if(!s.exists()){box.innerHTML=`<div class="notice">Belum ada sewa Bot Care aktif.</div>`;return;}
-    const r=s.data(),until=premiumUntilMillis(r.expiresAt);
-    if(until<=Date.now()){box.innerHTML=`<div class="notice">Masa sewa Bot Care sudah berakhir.</div>`;return;}
-    const used=(r.forumIds||[]).length,max=Number(r.maxForums||1);
-    box.innerHTML=`<div class="notice"><b>Bot Care aktif</b><br>Berakhir: ${new Date(until).toLocaleString("id-ID")}<br>Forum terpasang: ${used}/${max}</div>`;
-  }catch(e){box.innerHTML=`<div class="notice">Gagal memuat status Bot Care.</div>`;console.warn(e);}
-}
-async function installBotFromSettings(){
-  const code=$("botActivationInput")?.value.trim(),forumCode=$("botForumCodeInput")?.value.trim();
-  if(!code||!forumCode)return toast("Masukkan kode aktivasi Bot Care dan secret code forum.");
-  try{
-    let installed=false;
-    await runTransaction(db,async tx=>{
-      const actRef=doc(db,"botActivations",code), rentalRef=doc(db,"botRentals",currentUser.uid), codeRef=doc(db,"forumCodes",forumCode);
-      const [actSnap,rentalSnap,codeSnap]=await Promise.all([tx.get(actRef),tx.get(rentalRef),tx.get(codeRef)]);
-      if(!actSnap.exists())throw new Error("Kode aktivasi Bot Care tidak ditemukan.");
-      const a=actSnap.data();
-      if(a.uid!==currentUser.uid)throw new Error("Kode Bot Care ini bukan untuk akun kamu.");
-      const until=premiumUntilMillis(a.expiresAt);if(until<=Date.now())throw new Error("Masa sewa Bot Care sudah berakhir.");
-      if(!codeSnap.exists())throw new Error("Secret code forum tidak ditemukan.");
-      const forumId=codeSnap.data().forumId,forumRef=doc(db,"forums",forumId),forumSnap=await tx.get(forumRef);
-      if(!forumSnap.exists())throw new Error("Forum tidak ditemukan.");
-      const f=forumSnap.data(), existing=rentalSnap.exists()?rentalSnap.data():null;
-      let forumIds=Array.isArray(existing?.forumIds)?existing.forumIds.slice():[];
-      if(existing && existing.uid!==currentUser.uid)throw new Error("Data sewa tidak valid.");
-      if(existing && premiumUntilMillis(existing.expiresAt)>Date.now() && existing.activationCode && existing.activationCode!==code)throw new Error("Gunakan kode aktivasi Bot Care yang sudah aktif pada akun ini.");
-      if(!forumIds.includes(forumId)){
-        const max=Number(existing?.maxForums||a.maxForums||1);
-        if(forumIds.length>=max)throw new Error(`Batas Bot Care kamu sudah mencapai ${max} forum.`);
-        forumIds.push(forumId);
-      }
-      const rentalData={uid:currentUser.uid,expiresAt:a.expiresAt,maxForums:Number(existing?.maxForums||a.maxForums||1),forumIds,activationCode:existing?.activationCode||code,updatedAt:serverTimestamp()};
-      if(!existing){
-        if(a.used===true)throw new Error("Kode sudah digunakan tetapi data sewa akun tidak ditemukan.");
-        tx.update(actRef,{used:true,usedAt:serverTimestamp()});
-        tx.set(rentalRef,rentalData);
-      }else{
-        if(a.used!==true)tx.update(actRef,{used:true,usedAt:serverTimestamp()});
-        tx.update(rentalRef,rentalData);
-      }
-      tx.update(forumRef,{botCare:{enabled:true,name:"Bot Care",botId:"BOT_CARE",expiresAt:a.expiresAt,addedBy:currentUser.uid,addedRole:actorRole(),rental:true}});
-      installed=true;
-    });
-    if(installed){$("botActivationInput").value="";$("botForumCodeInput").value="";await loadBotRentalStatus();toast("Bot Care berhasil dimasukkan ke forum.");}
-  }catch(e){toast(e.message.replace("Firebase: ",""));}
-}
-$("botInstallForm")?.addEventListener("submit",e=>{e.preventDefault();installBotFromSettings();});
 
 
 $("forumModerationForm")?.addEventListener("submit",async e=>{
@@ -1116,35 +937,11 @@ async function loadAdminForums(){
 async function loadSupportRequests(){
   if(!canAdmin())return;
   try{
-    const s=await getDocs(query(collection(db,"supportRequests"),orderBy("createdAt","desc"),limit(50)));
-    $("supportResults").innerHTML=s.docs.map(d=>{
-      const r=d.data(),t=r.createdAt?.toDate?.().toLocaleString("id-ID")||"baru saja",isBot=r.type==="bot_rental";
-      const ready=r.status==="ready",done=r.status==="done";
-      const action=ready?`<div><span class="tiny muted">Kode aktivasi (${isBot?"20":"20"} karakter): </span><b class="activation-code">${esc(r.activationCode||"-")}</b></div><div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button class="secondary" onclick="navigator.clipboard?.writeText('${esc(r.activationCode||"")}');toast('Kode disalin.')">Salin kode</button><button class="secondary" onclick="adminCloseSupport('${d.id}')">Tandai selesai</button></div>`:(done?`<span class="tiny muted">Selesai</span>`:`<button class="secondary" onclick="${isBot?`adminVerifyBot('${d.id}')`:`adminVerifyPremium('${d.id}')`}">${isBot?"Verifikasi & buat kode Bot":"Verifikasi & buat kode Premium"}</button>`);
-      return `<div class="notice" style="margin:8px 0"><b>@${esc(r.username||"user")}</b> — ${esc(r.displayName||"")}<br>${isBot?`Sewa Bot Care: <b>${esc(r.plan||"Bot Care")}</b> • Rp${Number(r.price||0).toLocaleString("id-ID")} • ${Number(r.maxForums||1)} forum maksimal`:`Paket Premium: <b>${esc(r.plan||"Premium")}</b> • Rp${Number(r.price||0).toLocaleString("id-ID")} (${Number(r.days||0)} hari)`}<br><span class="tiny muted">${t} • ${esc(r.status||"open")}</span><div style="margin-top:8px">${action}</div></div>`;
-    }).join("")||`<div class="notice">Belum ada permintaan.</div>`;
+    const s=await getDocs(query(collection(db,"supportRequests"),orderBy("createdAt","desc"),limit(30)));
+    $("supportResults").innerHTML=s.docs.map(d=>{const r=d.data(); const t=r.createdAt?.toDate?.().toLocaleString("id-ID")||"baru saja"; const ready=r.status==="ready"; const done=r.status==="done"; const action=ready?`<div><span class="tiny muted">Kode aktivasi (20 karakter): </span><b class="activation-code">${esc(r.activationCode||"-")}</b></div><div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button class="secondary" onclick="navigator.clipboard?.writeText('${esc(r.activationCode||"")}');toast('Kode disalin.')">Salin kode</button><button class="secondary" onclick="adminCloseSupport('${d.id}')">Tandai selesai</button></div>`:(done?`<span class="tiny muted">Selesai</span>`:`<button class="secondary" onclick="adminVerifyPremium('${d.id}')">Verifikasi & buat kode</button>`); return `<div class="notice" style="margin:8px 0"><b>@${esc(r.username||"user")}</b> — ${esc(r.displayName||"")}<br>Paket: <b>${esc(r.plan||"Premium")}</b> • Rp${Number(r.price||0).toLocaleString("id-ID")} (${Number(r.days||0)} hari)<br><span class="tiny muted">${t} • ${esc(r.status||"open")}</span><div style="margin-top:8px">${action}</div></div>`}).join("")||`<div class="notice">Belum ada permintaan Premium.</div>`;
   }catch(err){$("supportResults").textContent="Gagal memuat permintaan: "+err.message.replace("Firebase: ","");}
 }
-
 window.adminVerifyPremium=async id=>{try{let verified=null;await runTransaction(db,async tx=>{const reqRef=doc(db,"supportRequests",id);const snap=await tx.get(reqRef);if(!snap.exists())throw new Error("Permintaan tidak ditemukan.");const r=snap.data();if(r.status!=="waiting_verification")throw new Error("Permintaan ini sudah diproses.");const days=Number(r.days||0);if(!r.uid||days<=0)throw new Error("Data pembelian tidak valid.");const code=activationCode();if(code.length!==20)throw new Error("Gagal membuat kode aktivasi 20 karakter.");const until=new Date(Date.now()+days*86400000);verified={r,code};tx.set(doc(db,"premiumActivations",code),{uid:r.uid,plan:r.plan||"Premium",days,premiumUntil:until,unlimited:false,used:false,codeLength:20,createdAt:serverTimestamp()});tx.update(reqRef,{status:"ready",activationCode:code,verifiedAt:serverTimestamp()});tx.set(doc(collection(db,"inbox")),{uid:r.uid,title:"PREMIUM",subject:"Kode aktivasi Premium kamu",message:`Pembayaran ${r.plan||"Premium"} telah diverifikasi admin. Kode aktivasi (20 karakter): ${code}. Masukkan kode ini di Pengaturan > Aktivasi Premium.`,activationCode:code,read:false,createdAt:serverTimestamp()});});toast("Pembayaran diverifikasi. Kode aktivasi dibuat dan dikirim ke Inbox.");if(verified)await logActivity("premium_verified",`Memverifikasi Premium ${verified.r.plan||"Premium"} untuk @${verified.r.username||"user"}`,{targetUid:verified.r.uid,plan:verified.r.plan||"Premium"});loadSupportRequests();}catch(err){toast(err.message.replace("Firebase: ",""));}};
-window.adminVerifyBot=async id=>{
-  try{
-    let verified=null;
-    await runTransaction(db,async tx=>{
-      const reqRef=doc(db,"supportRequests",id),snap=await tx.get(reqRef);
-      if(!snap.exists())throw new Error("Permintaan tidak ditemukan.");
-      const r=snap.data();if(r.type!=="bot_rental")throw new Error("Ini bukan permintaan Bot Care.");if(r.status!=="waiting_verification")throw new Error("Permintaan ini sudah diproses.");
-      const days=Number(r.days||0),maxForums=Number(r.maxForums||1);if(!r.uid||days<=0)throw new Error("Data sewa Bot Care tidak valid.");
-      const code=activationCode();if(code.length!==20)throw new Error("Gagal membuat kode Bot Care 20 karakter.");
-      const until=new Date(Date.now()+days*86400000);verified={r,code};
-      tx.set(doc(db,"botActivations",code),{uid:r.uid,plan:r.plan||"Bot Care",days,maxForums,expiresAt:until,used:false,codeLength:20,createdAt:serverTimestamp(),createdBy:currentUser.uid});
-      tx.update(reqRef,{status:"ready",activationCode:code,verifiedAt:serverTimestamp()});
-      tx.set(doc(collection(db,"inbox")),{uid:r.uid,title:"BOT CARE",subject:"Kode aktivasi Bot Care",message:`Pembayaran sewa ${r.plan||"Bot Care"} telah diverifikasi Admin. Kode aktivasi Bot Care (20 karakter): ${code}. Masukkan kode ini di Pengaturan, lalu masukkan secret code forum yang ingin dipasangi Bot Care. Maksimal ${maxForums} forum.`,activationCode:code,read:false,createdAt:serverTimestamp()});
-    });
-    toast("Sewa Bot Care diverifikasi. Kode dikirim ke Inbox.");if(verified)await logActivity("bot_rental_verified",`Memverifikasi sewa Bot Care ${verified.r.plan||"Bot Care"} untuk @${verified.r.username||"user"}`,{targetUid:verified.r.uid,plan:verified.r.plan||"Bot Care"});loadSupportRequests();
-  }catch(e){toast(e.message.replace("Firebase: ",""));}
-};
-
 async function createCustomActivation(formPrefix){
   if(!canAdmin())return toast("Tidak memiliki akses.");
   const username=$(formPrefix+"Username").value.trim();
