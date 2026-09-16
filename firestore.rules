@@ -20,8 +20,10 @@ service cloud.firestore {
     }
     function privileged() { return author() || admin(); }
     function targetAdmin(uid) {
-      return exists(/databases/$(database)/documents/admins/$(uid)) &&
-        get(/databases/$(database)/documents/admins/$(uid)).data.get("enabled", false) == true;
+      return (exists(/databases/$(database)/documents/admins/$(uid)) &&
+        get(/databases/$(database)/documents/admins/$(uid)).data.get("enabled", false) == true) ||
+        (exists(/databases/$(database)/documents/users/$(uid)) &&
+        get(/databases/$(database)/documents/users/$(uid)).data.get("isAdmin", false) == true);
     }
     function activeUser() {
       return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
@@ -277,8 +279,8 @@ service cloud.firestore {
       match /members/{uid} {
         allow read: if privileged() || (activeUser() && forumAvailable(forumId) && (request.auth.uid == uid || forumOwner(forumId)));
         allow create: if allowedUser() && request.auth.uid == uid && request.resource.data.username is string && request.resource.data.displayName is string &&
-          getAfter(/databases/$(database)/documents/forums/$(forumId)).data.ownerId is string &&
-          request.auth.uid in getAfter(/databases/$(database)/documents/forums/$(forumId)).data.get('memberIds', []);
+          get(/databases/$(database)/documents/forums/$(forumId)).data.ownerId is string &&
+          request.auth.uid in get(/databases/$(database)/documents/forums/$(forumId)).data.get('memberIds', []);
         allow update: if privileged() || (activeUser() && self(uid));
         allow delete: if privileged() || (forumOwner(forumId) && uid != request.auth.uid) || self(uid);
       }
@@ -300,7 +302,7 @@ service cloud.firestore {
             request.resource.data.get('attachment', null) is map &&
             request.resource.data.get('attachment', null).get('name','') is string &&
             request.resource.data.get('attachment', null).get('type','') is string &&
-            request.resource.data.get('attachment', null).get('size',0) is int &&
+            request.resource.data.get('attachment', null).get('size',0) is number &&
             request.resource.data.get('attachment', null).get('size',0) <= 104857600 &&
             request.resource.data.get('attachment', null).get('url','') is string
           )) &&
