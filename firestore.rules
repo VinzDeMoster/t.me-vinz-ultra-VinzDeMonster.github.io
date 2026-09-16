@@ -298,11 +298,11 @@ service cloud.firestore {
           request.resource.data.get('premiumPurchases',0) == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('premiumPurchases',0) &&
           (request.resource.data.get('attachment', null) == null || (
             request.resource.data.get('attachment', null) is map &&
-            request.resource.data.get('attachment', null).get('name','') is string &&
-            request.resource.data.get('attachment', null).get('type','') is string &&
-            request.resource.data.get('attachment', null).get('size',0) is int &&
-            request.resource.data.get('attachment', null).get('size',0) <= 104857600 &&
-            request.resource.data.get('attachment', null).get('url','') is string
+            request.resource.data.attachment.name is string &&
+            request.resource.data.attachment.type is string &&
+            request.resource.data.attachment.size is int &&
+            request.resource.data.attachment.size <= 104857600 &&
+            request.resource.data.attachment.url is string
           )) &&
           (privileged() || (
             activeUser() && forumAvailable(forumId) &&
