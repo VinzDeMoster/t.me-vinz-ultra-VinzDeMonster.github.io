@@ -283,7 +283,9 @@ service cloud.firestore {
         request.resource.data.memberIds.size() == 2;
       allow update: if activeUser() &&
         request.auth.uid in resource.data.get('memberIds', []) &&
-        request.resource.data.memberIds == resource.data.memberIds &&
+        request.resource.data.memberIds.size() == 2 &&
+        request.resource.data.memberIds.hasAll(resource.data.memberIds) &&
+        resource.data.memberIds.hasAll(request.resource.data.memberIds) &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberProfiles','updatedAt','lastSenderId']);
       allow delete: if false;
 
