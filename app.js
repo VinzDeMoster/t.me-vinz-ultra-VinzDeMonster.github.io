@@ -344,7 +344,7 @@ async function loadProfile(user){
     setLoggedInUI();
   });
   setLoggedInUI();
-  await ensureSecurityIdentity();
+  ensureSecurityIdentity();
   loadBotMenuConfig();
 }
 function applyMaintenance(enabled,message="",imageUrl=""){
@@ -571,8 +571,7 @@ $("directMessageForm")?.addEventListener("submit",async e=>{
     const recipient=recipientKey.data().publicKey,own=ownKey.data().publicKey;
     const [forRecipient,forSender]=await Promise.all([encryptForPublicKey(text,recipient),encryptForPublicKey(text,own)]);
     const chatRef=doc(db,"directChats",directChatId);
-    const memberIds=[currentUser.uid,directTarget.uid].sort();
-    await setDoc(chatRef,{memberIds,memberProfiles:{[currentUser.uid]:{username:profile.username,displayName:profile.displayName},[directTarget.uid]:{username:directTarget.username,displayName:directTarget.displayName}},updatedAt:serverTimestamp(),lastSenderId:currentUser.uid},{merge:true});
+    await setDoc(chatRef,{memberIds:[currentUser.uid,directTarget.uid],memberProfiles:{[currentUser.uid]:{username:profile.username,displayName:profile.displayName},[directTarget.uid]:{username:directTarget.username,displayName:directTarget.displayName}},updatedAt:serverTimestamp(),lastSenderId:currentUser.uid},{merge:true});
     await addDoc(collection(db,"directChats",directChatId,"messages"),{senderId:currentUser.uid,displayName:profile.displayName,ciphertexts:{[currentUser.uid]:forSender,[directTarget.uid]:forRecipient},...(attachment?{attachment}:{}),enc:SECURITY_VERSION,createdAt:serverTimestamp()});
     input.value="";input.style.height="auto";$("directMessageCount").textContent="0/100.000";if(fileInput){fileInput.value="";loadPrivateAttachmentLabel();}loadDirectChats();
   }catch(err){toast(err.message.replace("Firebase: ",""));}
