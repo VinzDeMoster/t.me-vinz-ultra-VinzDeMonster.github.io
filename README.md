@@ -18,3 +18,6 @@
 
 ## Firebase
 Rules yang sudah ada tetap disertakan. Upload ZIP ini ke hosting proyek dan deploy `firestore.rules`/`storage.rules` sesuai setup Firebase yang dipakai proyek.
+
+
+Login fix v4.1: authentication now shows progress, surfaces Firebase errors, and optional security/Bot Care initialization cannot block the login UI.

@@ -343,9 +343,14 @@ async function loadProfile(user){
     profile={...profile,...latest,premiumPurchases:Number(latest.premiumPurchases||0)};
     setLoggedInUI();
   });
-  setLoggedInUI();
-  ensureSecurityIdentity();
-  loadBotMenuConfig();
+  // Tampilkan aplikasi setelah profil utama berhasil dibaca. Fitur tambahan
+  // seperti E2E identity dan menu Bot Care tidak boleh membuat proses login macet.
+  try{ setLoggedInUI(); }catch(e){
+    console.error("UI initialization error:",e);
+    throw e;
+  }
+  ensureSecurityIdentity().catch(e=>console.warn("security identity setup:",e));
+  Promise.resolve(loadBotMenuConfig()).catch(e=>console.warn("bot menu setup:",e));
 }
 function applyMaintenance(enabled,message="",imageUrl=""){
   const modal=$("maintenanceModal"); if(!modal)return;
@@ -616,19 +621,29 @@ document.querySelectorAll("[data-page],[data-page-go]").forEach(b=>b.onclick=()=
 $("logoutBtn").onclick=()=>signOut(auth);
 $("authForm").onsubmit=async e=>{
   e.preventDefault();
+  if(window.__sfAuthBusy)return;
   const username=$("authUsername").value.trim(), password=$("authPassword").value;
+  const submit=$("authSubmit");
+  window.__sfAuthBusy=true;
+  if(submit){submit.disabled=true;submit.dataset.oldText=submit.textContent;submit.textContent=authMode==="login"?"Memproses…":"Membuat akun…";}
   try{
     if(authMode==="register"){
       const displayName=$("authDisplayName").value.trim()||username;
       const cred=await createUserWithEmailAndPassword(auth,emailForUsername(username),password);
       await setDoc(doc(db,"users",cred.user.uid),{username,usernameLower:username.toLowerCase(),displayName,premiumUntil:null,premiumPurchases:0,isAdmin:false,banned:false,suspendedUntil:null,createdAt:serverTimestamp()});
       await setDoc(doc(db,"publicProfiles",cred.user.uid),{uid:cred.user.uid,username,usernameLower:username.toLowerCase(),displayName,updatedAt:serverTimestamp()});
-      await getIdentityKeyPair();
+      getIdentityKeyPair().catch(err=>console.warn("identity setup:",err));
       toast("Akun berhasil dibuat.");
     }else{
       await signInWithEmailAndPassword(auth,emailForUsername(username),password);
     }
-  }catch(err){ toast(err.message.replace("Firebase: ","")); }
+  }catch(err){
+    console.error("Authentication error:",err);
+    toast((err?.message||"Login gagal.").replace("Firebase: ",""));
+  }finally{
+    window.__sfAuthBusy=false;
+    if(submit){submit.disabled=false;submit.textContent=submit.dataset.oldText|| (authMode==="login"?"Masuk":"Buat akun");}
+  }
 };
 function loadActivationStatus(){
   if(!currentUser)return;
@@ -1711,5 +1726,19 @@ $("promoMonthly").onclick=()=>showPage("contact");
 onAuthStateChanged(auth,async user=>{
   currentUser=user;
   if(!user){ profile=null; activeForum=null; identityKeyPairCache=null; if(unsubscribeMessages)unsubscribeMessages(); if(unsubscribeProfile)unsubscribeProfile(); if(unsubscribeActivations)unsubscribeActivations(); if(unsubscribeInbox)unsubscribeInbox(); if(unsubscribeMaintenance)unsubscribeMaintenance(); if(unsubscribeDirectMessages)unsubscribeDirectMessages(); unsubscribeMessages=unsubscribeProfile=unsubscribeActivations=unsubscribeInbox=unsubscribeMaintenance=unsubscribeDirectMessages=null; if(promoTimer){clearInterval(promoTimer); promoTimer=null;} if(window.adTimer){clearInterval(window.adTimer);window.adTimer=null;} if(adScheduleTimeout){clearTimeout(adScheduleTimeout);adScheduleTimeout=null;} if(botExpiryTimer){clearTimeout(botExpiryTimer);botExpiryTimer=null;} $("promo")?.classList.add("hidden"); $("adModal")?.classList.add("hidden"); }
-  if(user){try{await loadProfile(user);schedulePromo();scheduleAds()}catch(e){toast(e.message)}}else{$("appView").classList.add("hidden");$("authView").classList.remove("hidden");}
+  if(user){
+    try{
+      await loadProfile(user);
+      schedulePromo();
+      scheduleAds();
+    }catch(e){
+      console.error("Auth state/profile initialization error:",e);
+      $("appView")?.classList.add("hidden");
+      $("authView")?.classList.remove("hidden");
+      toast((e?.message||"Gagal memuat akun.").replace("Firebase: ",""));
+    }
+  }else{
+    $("appView")?.classList.add("hidden");
+    $("authView")?.classList.remove("hidden");
+  }
 });
