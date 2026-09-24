@@ -282,7 +282,7 @@ function showPage(name){
   if(name==="author" && isAuthor()){ loadAuthorPanel(); loadAdsManagement("authorAdsResults"); loadMaintenanceSettings(); loadBotMenuAdminUI(); }
   if(name==="activity" && currentUser) loadPublicActivity();
   if(name==="inbox" && currentUser) loadInbox();
-  if(name==="private" && currentUser){ $("page-private")?.querySelector(".wa-shell")?.classList.add("mobile-list"); loadPrivateMessaging(); }
+  if(name==="private" && currentUser) loadPrivateMessaging();
   if(name==="settings" && currentUser) loadActivationStatus();
   if(name==="create") updateMemberLimitUI();
   if(typeof window.sfTranslate==="function") window.sfTranslate();
@@ -343,14 +343,9 @@ async function loadProfile(user){
     profile={...profile,...latest,premiumPurchases:Number(latest.premiumPurchases||0)};
     setLoggedInUI();
   });
-  // Tampilkan aplikasi setelah profil utama berhasil dibaca. Fitur tambahan
-  // seperti E2E identity dan menu Bot Care tidak boleh membuat proses login macet.
-  try{ setLoggedInUI(); }catch(e){
-    console.error("UI initialization error:",e);
-    throw e;
-  }
-  ensureSecurityIdentity().catch(e=>console.warn("security identity setup:",e));
-  Promise.resolve(loadBotMenuConfig()).catch(e=>console.warn("bot menu setup:",e));
+  setLoggedInUI();
+  ensureSecurityIdentity();
+  loadBotMenuConfig();
 }
 function applyMaintenance(enabled,message="",imageUrl=""){
   const modal=$("maintenanceModal"); if(!modal)return;
@@ -424,23 +419,6 @@ async function encryptForPublicKey(text,recipientJwk){
   const ciphertext=await crypto.subtle.encrypt({name:"AES-GCM",iv},key,data);
   return {v:1,epk:await crypto.subtle.exportKey("jwk",eph.publicKey),iv:bytesToB64(iv),data:bytesToB64(ciphertext)};
 }
-async function encryptFileForPublicKey(file,recipientJwk){
-  const recipient=await importPublicKey(recipientJwk);
-  const eph=await crypto.subtle.generateKey({name:"ECDH",namedCurve:"P-256"},true,["deriveKey"]);
-  const key=await crypto.subtle.deriveKey({name:"ECDH",public:recipient},eph.privateKey,{name:"AES-GCM",length:256},false,["encrypt"]);
-  const iv=crypto.getRandomValues(new Uint8Array(12));
-  const plain=await file.arrayBuffer();
-  const cipher=await crypto.subtle.encrypt({name:"AES-GCM",iv},key,plain);
-  return {blob:new Blob([cipher],{type:"application/octet-stream"}),epk:await crypto.subtle.exportKey("jwk",eph.publicKey),iv:bytesToB64(iv)};
-}
-async function decryptFileForCurrentUser(meta){
-  const pair=await getIdentityKeyPair();
-  const eph=await importPublicKey(meta.epk);
-  const key=await crypto.subtle.deriveKey({name:"ECDH",public:eph},pair.privateKey,{name:"AES-GCM",length:256},false,["decrypt"]);
-  const res=await fetch(meta.url); if(!res.ok)throw new Error("Media terenkripsi tidak dapat diambil.");
-  const cipher=await res.arrayBuffer();
-  return crypto.subtle.decrypt({name:"AES-GCM",iv:b64ToBytes(meta.iv)},key,cipher);
-}
 async function decryptPayload(payload){
   if(!payload)return "";
   const pair=await getIdentityKeyPair();
@@ -467,17 +445,34 @@ async function decryptForumText(m,forum){
   }
   return "";
 }
-async function encryptForumFile(file,forum){
-  const key=await deriveForumKey(forum.id,forum.secretCode); const iv=crypto.getRandomValues(new Uint8Array(12));
-  const cipher=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,await file.arrayBuffer());
-  return {blob:new Blob([cipher],{type:'application/octet-stream'}),iv:bytesToB64(iv)};
+/* E2E media helpers: media bytes are encrypted in the browser before Cloudinary upload. */
+async function encryptBytesWithKey(bytes,key){
+  const iv=crypto.getRandomValues(new Uint8Array(12));
+  const data=await crypto.subtle.encrypt({name:"AES-GCM",iv},key,bytes);
+  return {iv:bytesToB64(iv),data:new Uint8Array(data)};
+}
+async function decryptBytesWithKey(payload,key){
+  const raw=payload.data instanceof Uint8Array||payload.data instanceof ArrayBuffer?payload.data:b64ToBytes(payload.data);
+  return crypto.subtle.decrypt({name:"AES-GCM",iv:b64ToBytes(payload.iv)},key,raw);
+}
+async function encryptForumAttachment(file,forum){
+  const key=await deriveForumKey(forum.id,forum.secretCode);
+  const encrypted=await encryptBytesWithKey(await file.arrayBuffer(),key);
+  const encFile=new File([encrypted.data],`${file.name}.sfenc`,{type:"application/octet-stream"});
+  const uploaded=await uploadCloudinaryFile(encFile,`secret-forum/${forum.id}/${currentUser.uid}/encrypted`,Math.max(10*1024*1024,file.size+1024));
+  const metaIv=crypto.getRandomValues(new Uint8Array(12));
+  const metaBytes=new TextEncoder().encode(JSON.stringify({name:file.name,type:file.type||"application/octet-stream",size:file.size}));
+  const metaData=await crypto.subtle.encrypt({name:"AES-GCM",iv:metaIv},key,metaBytes);
+  return {encrypted:true,url:uploaded.url,provider:"cloudinary",publicId:uploaded.publicId||"",meta:{iv:bytesToB64(metaIv),data:bytesToB64(metaData)},iv:encrypted.iv};
 }
 async function decryptForumAttachment(a,forum){
-  if(!a?.url)return null;
-  if(!a.enc||!a.iv)return {url:a.url,legacy:true};
-  const key=await deriveForumKey(forum.id,forum.secretCode); const res=await fetch(a.url); if(!res.ok)throw new Error('Media forum tidak dapat diambil.');
-  const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64ToBytes(a.iv)},key,await res.arrayBuffer());
-  return {url:URL.createObjectURL(new Blob([plain],{type:a.type||'application/octet-stream'})),legacy:false};
+  if(!a?.encrypted)return null;
+  const key=await deriveForumKey(forum.id,forum.secretCode);
+  const meta=JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({name:"AES-GCM",iv:b64ToBytes(a.meta.iv)},key,b64ToBytes(a.meta.data))));
+  const res=await fetch(a.url); if(!res.ok)throw new Error("Media tidak dapat diambil dari server.");
+  const encryptedBytes=await res.arrayBuffer();
+  const plain=await decryptBytesWithKey({iv:a.iv,data:bytesToB64(new Uint8Array(encryptedBytes))},key);
+  return {blob:new Blob([plain],{type:meta.type}),...meta};
 }
 function directChatIdFor(a,b){return [a,b].sort().join("_");}
 async function getPublicProfileByUsername(username){
@@ -515,135 +510,212 @@ async function loadDirectChats(){
     box.querySelectorAll("[data-open-direct]").forEach(b=>b.onclick=()=>openDirectChat(b.dataset.openDirect));
   }catch(e){box.innerHTML=`<div class="notice">Gagal memuat percakapan: ${esc(e.message.replace("Firebase: ",""))}</div>`;}
 }
-async function renderDirectAttachment(a,ownerId,container){
-  if(!a||!a.files?.[ownerId])return "";
-  const meta=a.files[ownerId], type=String(a.type||"application/octet-stream"), name=a.name||"Media";
+async function getDirectContent(m){
+  const envelope=m.ciphertexts?.[currentUser.uid];
+  if(!envelope)return {kind:"text",text:"🔒 Pesan terenkripsi tidak tersedia di perangkat ini."};
   try{
-    const buf=await decryptFileForCurrentUser(meta);
-    const blob=new Blob([buf],{type}); const url=URL.createObjectURL(blob);
-    if(type.startsWith("image/")) return `<div class="direct-attachment direct-image"><img src="${url}" alt="${esc(name)}" loading="lazy"></div>`;
-    if(type.startsWith("video/")) return `<div class="direct-attachment direct-video"><video controls preload="metadata" src="${url}"></video></div>`;
-    return `<div class="direct-attachment direct-file"><span>📎</span><a href="${url}" download="${esc(name)}">${esc(name)}</a><span class="tiny muted">${formatBytes(a.size)}</span></div>`;
-  }catch{return `<div class="direct-attachment direct-file"><span>🔒</span><span>Media terenkripsi tidak dapat dibuka di perangkat ini.</span></div>`;}
+    const payload=envelope.text||envelope;
+    const raw=await decryptPayload(payload);
+    try{
+      const parsed=JSON.parse(raw);
+      if(parsed&&parsed.type==="contact")return {kind:"contact",text:"",contact:parsed.contact||{}};
+      return {kind:"text",text:String(parsed.text??raw)};
+    }catch{return {kind:"text",text:raw};}
+  }catch{return {kind:"text",text:"🔒 Pesan terenkripsi tidak dapat dibuka di perangkat ini."};}
 }
-function parseDirectPayload(text){
-  try{const o=JSON.parse(text); if(o&&typeof o==="object"&&o.kind)return o;}catch{} return {kind:"text",text};
+async function encryptDirectFile(file,recipientJwk,ownJwk){
+  const fileKey=await crypto.subtle.generateKey({name:"AES-GCM",length:256},true,["encrypt","decrypt"]);
+  const rawKey=await crypto.subtle.exportKey("raw",fileKey);
+  const encrypted=await encryptBytesWithKey(await file.arrayBuffer(),fileKey);
+  const encFile=new File([encrypted.data],`${file.name}.sfenc`,{type:"application/octet-stream"});
+  const uploaded=await uploadCloudinaryFile(encFile,`secret-forum/private/${currentUser.uid}`,Math.max(10*1024*1024,file.size+1024));
+  const meta=JSON.stringify({name:file.name,type:file.type||"application/octet-stream",size:file.size,key:bytesToB64(rawKey),iv:encrypted.iv});
+  const [forRecipient,forSender]=await Promise.all([encryptForPublicKey(meta,recipientJwk),encryptForPublicKey(meta,ownJwk)]);
+  return {url:uploaded.url,provider:"cloudinary",publicId:uploaded.publicId||"",keys:{[directTarget.uid]:forRecipient,[currentUser.uid]:forSender}};
 }
-function setDirectHeader(){
-  const avatar=$("directAvatar"); if(avatar)avatar.textContent=(directTarget?.displayName||directTarget?.username||"?")[0]?.toUpperCase()||"?";
+async function decryptDirectFile(m){
+  const payload=m.ciphertexts?.[currentUser.uid]?.media;
+  if(!payload||!m.attachment?.url)throw new Error("Media terenkripsi tidak ditemukan.");
+  const meta=JSON.parse(await decryptPayload(payload));
+  const res=await fetch(m.attachment.url);if(!res.ok)throw new Error("Media tidak dapat diambil.");
+  const bytes=await res.arrayBuffer();
+  const key=await crypto.subtle.importKey("raw",b64ToBytes(meta.key),{name:"AES-GCM"},false,["decrypt"]);
+  const plain=await decryptBytesWithKey({iv:meta.iv,data:bytesToB64(new Uint8Array(bytes))},key);
+  return {blob:new Blob([plain],{type:meta.type}),...meta};
+}
+function directContactCardHTML(c){
+  const name=c.displayName||c.username||"User",username=c.username||"";
+  const initial=esc(String(name).trim().charAt(0).toUpperCase()||"U");
+  return `<div class="wa-contact-card"><div class="wa-card-avatar">${initial}</div><div><b>${esc(name)}</b><span>@${esc(username)}</span></div><button type="button" data-open-contact-card="${esc(c.uid||"")}">Chat</button></div>`;
+}
+async function renderDirectMessages(snap){
+  const box=$("directMessages");if(!box)return;
+  const rows=await Promise.all(snap.docs.map(async d=>{
+    const m=d.data(),content=await getDirectContent(m),text=content.text||"";
+    const me=m.senderId===currentUser.uid,long=text.length>100,preview=long?text.slice(0,500):text;
+    const attachment=m.attachment?.url?`<div class="direct-media"><button type="button" class="secondary" data-open-direct-media="${d.id}">🔐 Buka media</button></div>`:"";
+    const contact=content.kind==="contact"?directContactCardHTML(content.contact):"";
+    return `<div class="direct-msg ${me?"me":""}" data-direct-message="${d.id}">${attachment}${contact}${text?`<div class="direct-text ${long?"collapsed":""}">${esc(preview)}</div>`:""}${long?`<button class="read-more direct-read-more" data-direct-read="${d.id}" data-expanded="false">Baca selengkapnya</button>`:""}<div class="direct-time">${m.createdAt?.toDate?.().toLocaleString("id-ID")||"baru saja"}</div></div>`;
+  }));
+  box.innerHTML=rows.join("")||'<div class="notice">Belum ada pesan. Mulai percakapan ini.</div>';
+
+  const fullCache={};
+  for(const d of snap.docs){
+    const c=await getDirectContent(d.data());fullCache[d.id]=c.text||"";
+  }
+  box.querySelectorAll("[data-direct-read]").forEach(btn=>btn.onclick=()=>{
+    const full=fullCache[btn.dataset.directRead]||"",el=btn.closest(".direct-msg")?.querySelector(".direct-text");if(!el)return;
+    const expanded=btn.dataset.expanded==="true";el.textContent=expanded?full:full.slice(0,500);el.classList.toggle("collapsed",!expanded);btn.dataset.expanded=expanded?"false":"true";btn.textContent=expanded?"Baca selengkapnya":"Sembunyikan";
+  });
+  box.querySelectorAll("[data-open-direct-media]").forEach(btn=>btn.onclick=async()=>{
+    const original=btn.textContent;btn.disabled=true;btn.textContent="Membuka media…";
+    try{
+      const d=snap.docs.find(x=>x.id===btn.dataset.openDirectMedia);if(!d)throw new Error("Pesan tidak ditemukan.");
+      const media=await decryptDirectFile(d.data()),url=URL.createObjectURL(media.blob),wrap=btn.parentElement;
+      if(media.type.startsWith("image/"))wrap.innerHTML=`<a href="${url}" target="_blank" rel="noopener"><img src="${url}" alt="${esc(media.name)}"></a>`;
+      else if(media.type.startsWith("video/"))wrap.innerHTML=`<video controls preload="metadata" src="${url}"></video>`;
+      else wrap.innerHTML=`<a class="secondary" href="${url}" download="${esc(media.name)}">📎 ${esc(media.name)} • ${formatBytes(media.size)}</a>`;
+    }catch(err){toast("Gagal membuka media: "+err.message.replace("Firebase: ",""));btn.disabled=false;btn.textContent=original;}
+  });
+  box.querySelectorAll("[data-open-contact-card]").forEach(btn=>btn.onclick=()=>openDirectChat(btn.dataset.openContactCard));
+  box.scrollTop=box.scrollHeight;
 }
 async function openDirectChat(uid){
   if(!uid||uid===currentUser.uid)return;
   const p=await getDoc(doc(db,"publicProfiles",uid));if(!p.exists())return toast("User tidak ditemukan.");
-  directTarget={uid,...p.data()}; directChatId=directChatIdFor(currentUser.uid,uid);
+  directTarget={uid,...p.data()};directChatId=directChatIdFor(currentUser.uid,uid);
   $("directChatTitle").textContent=directTarget.displayName||directTarget.username||"User";
-  $("page-private")?.querySelector(".wa-shell")?.classList.remove("mobile-list");
-  $("directChatSubtitle").textContent="@"+(directTarget.username||""); setDirectHeader();
-  $("directSecurityBadge").classList.remove("hidden");
-  $("directMessageInput").disabled=false;$("directAttachment").disabled=false;$("directContactShareBtn").disabled=false;$("directMessageForm").querySelector("button[type=submit]").disabled=false;$("directMessageForm").classList.remove("locked");
+  $("directChatSubtitle").textContent="@"+(directTarget.username||"");
+  const av=$("directAvatar");if(av)av.textContent=String(directTarget.displayName||directTarget.username||"U").trim().charAt(0).toUpperCase()||"U";
+  $("directSecurityBadge")?.classList.remove("hidden");
+  const form=$("directMessageForm");form.querySelector("button[type=submit]").disabled=false;form.classList.remove("locked");
+  $("directMessageInput").disabled=false;
+  $("page-private")?.classList.add("chat-open");
   if(unsubscribeDirectMessages)unsubscribeDirectMessages();
   const q=query(collection(db,"directChats",directChatId,"messages"),orderBy("createdAt","asc"));
-  unsubscribeDirectMessages=onSnapshot(q,async s=>{
-    const box=$("directMessages"); if(!box)return;
-    const rows=await Promise.all(s.docs.map(async d=>{
-      const m=d.data();let raw=""; try{raw=await decryptPayload(m.ciphertexts?.[currentUser.uid]);}catch{raw="";}
-      const payload=parseDirectPayload(raw), me=m.senderId===currentUser.uid;
-      let body="";
-      if(payload.kind==="contact") body=`<div class="shared-contact"><div class="shared-contact-avatar">${esc((payload.contact?.displayName||payload.contact?.username||"?")[0]||"?")}</div><div><b>${esc(payload.contact?.displayName||payload.contact?.username||"User")}</b><span>@${esc(payload.contact?.username||"")}</span></div><button class="secondary" data-shared-contact="${esc(payload.contact?.uid||"")}">Chat</button></div>`;
-      else body=`<div class="direct-text ${String(payload.text||"").length>100?"collapsed":""}">${esc(String(payload.text||"")).replace(/\n/g,"<br>")}</div>${String(payload.text||"").length>100?`<button class="read-more direct-read-more" data-direct-read="${d.id}" data-expanded="false">Baca selengkapnya</button>`:""}`;
-      if(m.attachment){const att=await renderDirectAttachment(m.attachment,currentUser.uid,box); body=att+body;}
-      return `<div class="direct-msg ${me?"me":""}" data-direct-message="${d.id}">${body}<div class="direct-time">${m.createdAt?.toDate?.().toLocaleString("id-ID")||"baru saja"}</div></div>`;
-    }));
-    box.innerHTML=rows.join("")||'<div class="wa-empty"><div>💬</div><b>Belum ada pesan</b><span>Mulai percakapan ini.</span></div>';
-    const full={};
-    for(const d of s.docs){try{const raw=await decryptPayload(d.data().ciphertexts?.[currentUser.uid]);const p=parseDirectPayload(raw);full[d.id]=String(p.text||"");}catch{full[d.id]="🔒 Pesan terenkripsi tidak dapat dibuka di perangkat ini.";}}
-    box.querySelectorAll("[data-direct-read]").forEach(btn=>btn.onclick=()=>{const el=btn.closest(".direct-msg")?.querySelector(".direct-text");if(!el)return;const f=full[btn.dataset.directRead]||"";const ex=btn.dataset.expanded==="true";el.innerHTML=esc(ex?f:f.slice(0,500)).replace(/\n/g,"<br>");el.classList.toggle("collapsed",!ex);btn.dataset.expanded=ex?"false":"true";btn.textContent=ex?"Baca selengkapnya":"Sembunyikan";});
-    box.querySelectorAll("[data-shared-contact]").forEach(btn=>btn.onclick=()=>openDirectChat(btn.dataset.sharedContact));
-    box.scrollTop=box.scrollHeight;
-  },e=>toast("Gagal memuat pesan pribadi: "+e.message.replace("Firebase: ","")));
+  unsubscribeDirectMessages=onSnapshot(q,s=>renderDirectMessages(s),e=>toast("Gagal memuat pesan pribadi: "+e.message.replace("Firebase: ","")));
+  loadDirectChats();
 }
-async function loadPrivateMessaging(){await Promise.all([loadContacts(),loadDirectChats()]);}
-async function uploadEncryptedDirectFile(file,recipientUid,folder){
-  const keySnap=await getDoc(doc(db,"publicKeys",recipientUid)); if(!keySnap.exists())throw new Error("Kunci keamanan penerima belum tersedia. Minta user tersebut login kembali.");
-  const enc=await encryptFileForPublicKey(file,keySnap.data().publicKey);
-  const safeName=file.name.replace(/[^a-zA-Z0-9._-]/g,"_").slice(0,120);
-  const form=new FormData();form.append("file",enc.blob,`${safeName}.enc`);form.append("upload_preset",CLOUDINARY_UPLOAD_PRESET);form.append("folder",folder);
-  const res=await fetch(CLOUDINARY_UPLOAD_URL,{method:"POST",body:form});const data=await res.json();if(!res.ok||!data.secure_url)throw new Error(data.error?.message||"Upload media terenkripsi gagal.");
-  return {url:data.secure_url,publicId:data.public_id||"",epk:enc.epk,iv:enc.iv};
+async function loadContacts(){
+  if(!currentUser)return;const box=$("contactList");if(!box)return;
+  try{
+    const s=await getDocs(collection(db,"contacts",currentUser.uid,"items"));
+    box.innerHTML=s.docs.map(d=>{const c=d.data(),name=c.displayName||c.username||"User",initial=esc(name.trim().charAt(0).toUpperCase()||"U");return `<div class="wa-contact-item" data-open-contact="${d.id}"><div class="wa-contact-avatar">${initial}</div><div class="wa-contact-info"><b>${esc(name)}</b><span>@${esc(c.username||"")}</span></div><div class="wa-contact-actions"><button type="button" data-open-contact-btn="${d.id}" title="Chat">▸</button><button type="button" data-remove-contact="${d.id}" title="Hapus">×</button></div></div>`}).join("")||'<div class="notice">Belum ada kontak.</div>';
+    box.querySelectorAll("[data-open-contact],[data-open-contact-btn]").forEach(b=>b.onclick=e=>{if(e.target.dataset.removeContact)return;openDirectChat(b.dataset.openContact||b.dataset.openContactBtn);});
+    box.querySelectorAll("[data-remove-contact]").forEach(b=>b.onclick=e=>{e.stopPropagation();removeContact(b.dataset.removeContact);});
+  }catch(e){box.innerHTML=`<div class="notice">Gagal memuat kontak: ${esc(e.message.replace("Firebase: ",""))}</div>`;}
 }
-async function sendDirectPayload(payload,attachment=null){
-  const recipientKey=await getDoc(doc(db,"publicKeys",directTarget.uid));const ownKey=await getDoc(doc(db,"publicKeys",currentUser.uid));
+async function loadDirectChats(){
+  if(!currentUser)return;const box=$("directChatList");if(!box)return;
+  try{
+    const s=await getDocs(query(collection(db,"directChats"),where("memberIds","array-contains",currentUser.uid)));
+    const rows=s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.updatedAt?.toMillis?.()||0)-(a.updatedAt?.toMillis?.()||0));
+    box.innerHTML=rows.map(c=>{const other=(c.memberIds||[]).find(x=>x!==currentUser.uid),op=c.memberProfiles?.[other]||{},name=op.displayName||op.username||"User",initial=esc(name.trim().charAt(0).toUpperCase()||"U");return `<div class="wa-contact-item" data-open-direct="${other}"><div class="wa-contact-avatar">${initial}</div><div class="wa-contact-info"><b>${esc(name)}</b><span>@${esc(op.username||"")}</span></div><div class="wa-contact-actions"><button type="button" data-open-direct-btn="${other}">▸</button></div></div>`}).join("")||'<div class="notice">Belum ada percakapan.</div>';
+    box.querySelectorAll("[data-open-direct],[data-open-direct-btn]").forEach(b=>b.onclick=e=>openDirectChat(b.dataset.openDirect||b.dataset.openDirectBtn));
+  }catch(e){box.innerHTML=`<div class="notice">Gagal memuat percakapan: ${esc(e.message.replace("Firebase: ",""))}</div>`;}
+}
+async function loadDirectContactPicker(){
+  const box=$("directContactPickerList");if(!box||!currentUser)return;
+  try{
+    const s=await getDocs(collection(db,"contacts",currentUser.uid,"items"));
+    box.innerHTML=s.docs.map(d=>{const c=d.data(),name=c.displayName||c.username||"User",initial=esc(name.trim().charAt(0).toUpperCase()||"U");return `<button type="button" class="wa-picker-contact" data-send-contact="${d.id}"><span class="wa-contact-avatar">${initial}</span><span><b>${esc(name)}</b><small>@${esc(c.username||"")}</small></span></button>`}).join("")||'<div class="notice">Simpan kontak terlebih dahulu untuk mengirim kontak.</div>';
+    box.querySelectorAll("[data-send-contact]").forEach(b=>b.onclick=async()=>{try{const c=await getDoc(doc(db,"contacts",currentUser.uid,"items",b.dataset.sendContact));if(c.exists()){await sendDirectPayload({contact:c.data()});$("directContactPicker").classList.add("hidden");}}catch(e){toast(e.message.replace("Firebase: ",""));}});
+  }catch(e){box.innerHTML=`<div class="notice">${esc(e.message.replace("Firebase: ",""))}</div>`;}
+}
+async function saveContact(uid){
+  if(!uid||uid===currentUser.uid)return toast("Kamu tidak dapat menyimpan akun sendiri.");
+  const p=await getDoc(doc(db,"publicProfiles",uid));if(!p.exists())return toast("Profil publik tidak ditemukan.");
+  const d=p.data();await setDoc(doc(db,"contacts",currentUser.uid,"items",uid),{uid,username:d.username,usernameLower:d.usernameLower,displayName:d.displayName||d.username,createdAt:serverTimestamp()},{merge:true});
+  toast("Kontak disimpan.");loadContacts();
+}
+async function removeContact(uid){try{await deleteDoc(doc(db,"contacts",currentUser.uid,"items",uid));toast("Kontak dihapus.");loadContacts();}catch(e){toast(e.message.replace("Firebase: ",""));}}
+async function loadPrivateMessaging(){
+  const me=$("privateMeAvatar");if(me)me.textContent=String(profile?.displayName||profile?.username||"M").trim().charAt(0).toUpperCase()||"M";
+  await Promise.all([loadContacts(),loadDirectChats(),loadDirectContactPicker()]);
+}
+async function sendDirectPayload({text="",contact=null,attachmentFile=null}={}){
+  if(!directTarget||!currentUser)return;
+  text=String(text||"").trim();if(text.length>100000)throw new Error("Pesan terlalu panjang. Maksimal 100.000 karakter.");
+  if(!text&&!contact&&!attachmentFile)return;
+  const recipientKey=await getDoc(doc(db,"publicKeys",directTarget.uid)),ownKey=await getDoc(doc(db,"publicKeys",currentUser.uid));
   if(!recipientKey.exists()||!ownKey.exists())throw new Error("Kunci keamanan user belum tersedia. Minta user tersebut login kembali.");
-  const [forRecipient,forSender]=await Promise.all([encryptForPublicKey(JSON.stringify(payload),recipientKey.data().publicKey),encryptForPublicKey(JSON.stringify(payload),ownKey.data().publicKey)]);
+  const recipient=recipientKey.data().publicKey,own=ownKey.data().publicKey;
+  const envelope={};
+  if(text)envelope.text=await encryptForPublicKey(text,recipient);
+  if(contact){
+    const payload=JSON.stringify({type:"contact",contact:{uid:contact.uid,username:contact.username,displayName:contact.displayName}});
+    const [r,s]=await Promise.all([encryptForPublicKey(payload,recipient),encryptForPublicKey(payload,own)]);envelope.text=r;envelope.selfText=s;
+  }
+  if(text&&!contact)envelope.selfText=await encryptForPublicKey(text,own);
+  let attachment=null;
+  if(attachmentFile)attachment=await encryptDirectFile(attachmentFile,recipient,own);
+  if(attachment){
+    envelope.media=attachment.keys[directTarget.uid];
+    envelope.selfMedia=attachment.keys[currentUser.uid];
+  }
   const chatRef=doc(db,"directChats",directChatId);
-  const data={memberIds:[currentUser.uid,directTarget.uid],memberProfiles:{[currentUser.uid]:{username:profile.username,displayName:profile.displayName},[directTarget.uid]:{username:directTarget.username,displayName:directTarget.displayName}},updatedAt:serverTimestamp(),lastSenderId:currentUser.uid};
-  await setDoc(chatRef,data,{merge:true});
-  await addDoc(collection(db,"directChats",directChatId,"messages"),{senderId:currentUser.uid,ciphertexts:{[currentUser.uid]:forSender,[directTarget.uid]:forRecipient},...(attachment?{attachment}:{}),enc:SECURITY_VERSION,createdAt:serverTimestamp()});
+  await setDoc(chatRef,{memberIds:[currentUser.uid,directTarget.uid],memberProfiles:{[currentUser.uid]:{username:profile.username,displayName:profile.displayName},[directTarget.uid]:{username:directTarget.username,displayName:directTarget.displayName}},updatedAt:serverTimestamp(),lastSenderId:currentUser.uid},{merge:true});
+  const mediaForMessage=attachment?{url:attachment.url,provider:"cloudinary",encrypted:true}:null;
+  const ciphertexts={
+    [directTarget.uid]:{...(envelope.text?{text:envelope.text}:{}),...(envelope.media?{media:envelope.media}:{} )},
+    [currentUser.uid]:{...(envelope.selfText?{text:envelope.selfText}:{}),...(envelope.selfMedia?{media:envelope.selfMedia}:{} )}
+  };
+  await addDoc(collection(db,"directChats",directChatId,"messages"),{senderId:currentUser.uid,ciphertexts,attachment:mediaForMessage,enc:SECURITY_VERSION,createdAt:serverTimestamp()});
 }
-function resetDirectComposer(){const i=$("directMessageInput"),f=$("directAttachment"),n=$("directAttachmentName"),p=$("directAttachmentPreview");if(i){i.value="";i.style.height="auto";}if(f)f.value="";if(n)n.textContent="";if(p){p.innerHTML="";p.classList.add("hidden");}}
-async function openContactShare(){
-  if(!directTarget)return; const modal=$("contactShareModal"),list=$("contactShareList"); if(!modal||!list)return;
-  const s=await getDocs(collection(db,"contacts",currentUser.uid,"items")); const rows=s.docs.map(d=>({uid:d.id,...d.data()}));
-  list.innerHTML=rows.map(c=>`<button type="button" class="contact-share-item" data-share-contact="${esc(c.uid)}"><span class="wa-avatar">${esc((c.displayName||c.username||"?")[0]||"?")}</span><span><b>${esc(c.displayName||c.username||"User")}</b><small>@${esc(c.username||"")}</small></span><span>➤</span></button>`).join("")||'<div class="notice">Belum ada kontak tersimpan.</div>';
-  modal.classList.remove("hidden"); list.querySelectorAll("[data-share-contact]").forEach(b=>b.onclick=async()=>{try{const uid=b.dataset.shareContact;const p=await getDoc(doc(db,"publicProfiles",uid));if(!p.exists())throw new Error("Kontak tidak ditemukan.");await sendDirectPayload({kind:"contact",contact:{uid,username:p.data().username,displayName:p.data().displayName||p.data().username}});modal.classList.add("hidden");toast("Kontak dikirim.");}catch(e){toast(e.message.replace("Firebase: ",""));}});
-}
-$("contactShareClose")?.addEventListener("click",()=>$("contactShareModal").classList.add("hidden"));
-$("directContactShareBtn")?.addEventListener("click",openContactShare);
-$("waBackToList")?.addEventListener("click",()=>$("page-private")?.querySelector(".wa-shell")?.classList.add("mobile-list"));
 $("privateSearchForm")?.addEventListener("submit",async e=>{
   e.preventDefault();const username=$("privateSearchInput").value.trim();if(!username)return;
-  try{const p=await getPublicProfileByUsername(username);if(!p)return $("privateSearchResult").innerHTML='<div class="notice">Username tidak ditemukan.</div>';
-    $("privateSearchResult").innerHTML=`<div class="wa-search-result"><div><b>${esc(p.displayName||p.username)}</b><span>@${esc(p.username)}</span></div><div><button class="primary" id="startPrivateBtn">Chat</button><button class="secondary" id="savePrivateBtn">Simpan</button></div></div>`;
+  try{
+    const p=await getPublicProfileByUsername(username);
+    if(!p)return $("privateSearchResult").innerHTML='<div class="notice">Username tidak ditemukan. Pastikan user sudah pernah login setelah fitur keamanan diaktifkan.</div>';
+    $("privateSearchResult").innerHTML=`<div class="wa-contact-item" style="margin:4px 0"><div class="wa-contact-avatar">${esc(String(p.displayName||p.username).charAt(0).toUpperCase())}</div><div class="wa-contact-info"><b>${esc(p.displayName||p.username)}</b><span>@${esc(p.username)}</span></div><div class="wa-contact-actions"><button type="button" class="secondary" id="startPrivateBtn">Chat</button><button type="button" class="secondary" id="savePrivateBtn">＋</button></div></div>`;
     $("startPrivateBtn").onclick=()=>openDirectChat(p.uid);$("savePrivateBtn").onclick=()=>saveContact(p.uid);
   }catch(e){toast(e.message.replace("Firebase: ",""));}
 });
 $("refreshPrivateBtn")?.addEventListener("click",()=>loadPrivateMessaging());
-$("directAttachment")?.addEventListener("change",e=>{const f=e.target.files?.[0],n=$("directAttachmentName"),p=$("directAttachmentPreview");if(n)n.textContent=f?`${f.name} • ${formatBytes(f.size)}`:"";if(p){p.classList.toggle("hidden",!f);p.textContent=f?`🔒 ${f.name} akan dienkripsi sebelum diunggah.`:"";}});
-$("directMessageForm")?.addEventListener("submit",async e=>{
-  e.preventDefault();if(!directTarget||!currentUser)return;const input=$("directMessageInput"),file=$("directAttachment")?.files?.[0]||null,text=input.value.trim();if(!text&&!file)return;
-  if(text.length>100000)return toast("Pesan terlalu panjang. Maksimal 100.000 karakter.");
-  if(file && file.size>25*1024*1024)return toast("Media pribadi terenkripsi maksimal 25 MB per kiriman.");
-  const btn=e.target.querySelector("button[type=submit]"), old=btn?.textContent;if(btn){btn.disabled=true;btn.textContent=file?"🔒 Mengamankan…":"Mengirim…";}
-  try{
-    let attachment=null;
-    if(file){
-      if(CLOUDINARY_CLOUD_NAME === "YOUR_CLOUD_NAME" || CLOUDINARY_UPLOAD_PRESET === "YOUR_UNSIGNED_UPLOAD_PRESET")throw new Error("Media belum dikonfigurasi di Cloudinary.");
-      const [forRecipient,forSender]=await Promise.all([uploadEncryptedDirectFile(file,directTarget.uid,`secret-forum/private/${directChatId}`),uploadEncryptedDirectFile(file,currentUser.uid,`secret-forum/private/${directChatId}`)]);
-      attachment={name:file.name,type:file.type||"application/octet-stream",size:file.size,files:{[directTarget.uid]:forRecipient,[currentUser.uid]:forSender},enc:SECURITY_VERSION};
-    }
-    await sendDirectPayload({kind:"text",text:text.slice(0,100000)},attachment);resetDirectComposer();loadDirectChats();
-  }catch(err){toast(err.message.replace("Firebase: ",""));}finally{if(btn){btn.disabled=false;btn.textContent=old||"➤";}}
+$("directAttachBtn")?.addEventListener("click",()=>{if(!directTarget)return toast("Pilih percakapan terlebih dahulu.");$("directAttachment").click();});
+$("directAttachment")?.addEventListener("change",e=>{
+  const f=e.target.files?.[0],box=$("directAttachmentPreview");if(!box)return;
+  if(!f){box.classList.add("hidden");box.textContent="";return;}
+  const max=(f.type||"").startsWith("video/")?50*1024*1024:((f.type||"").startsWith("image/")?10*1024*1024:20*1024*1024);
+  if(f.size>max){e.target.value="";return toast(`File terlalu besar. Maksimal ${formatBytes(max)}.`);}
+  box.classList.remove("hidden");box.textContent=`📎 ${f.name} • ${formatBytes(f.size)} • terenkripsi sebelum upload`;
 });
-$("directMessageInput")?.addEventListener("input",e=>{e.target.style.height="auto";e.target.style.height=Math.min(e.target.scrollHeight,180)+"px";$("directMessageCount").textContent=`${e.target.value.length.toLocaleString("id-ID")}/100.000`;});
-
+$("directContactBtn")?.addEventListener("click",async()=>{if(!directTarget)return toast("Pilih percakapan terlebih dahulu.");$("directContactPicker").classList.remove("hidden");await loadDirectContactPicker();});
+$("closeContactPicker")?.addEventListener("click",()=>$("directContactPicker").classList.add("hidden"));
+$("privateBackBtn")?.addEventListener("click",()=>{ $("page-private")?.classList.remove("chat-open"); if(unsubscribeDirectMessages){unsubscribeDirectMessages();unsubscribeDirectMessages=null;} directTarget=null; });
+$("directMessageForm")?.addEventListener("submit",async e=>{
+  e.preventDefault();if(!directTarget||!currentUser)return;
+  const input=$("directMessageInput"),fileInput=$("directAttachment"),text=input.value.trim(),file=fileInput?.files?.[0]||null,btn=e.target.querySelector("button[type=submit]");
+  if(!text&&!file)return;
+  if(btn)btn.disabled=true;
+  try{
+    if(btn)btn.textContent=file?"🔒":"➤";
+    await sendDirectPayload({text,attachmentFile:file});
+    input.value="";input.style.height="auto";$("directMessageCount").textContent="0/100.000";
+    if(fileInput)fileInput.value="";$("directAttachmentPreview")?.classList.add("hidden");
+    loadDirectChats();
+  }catch(err){toast(err.message.replace("Firebase: ",""));}
+  finally{if(btn){btn.disabled=false;btn.textContent="➤";}}
+});
+$("directMessageInput")?.addEventListener("input",e=>{e.target.style.height="auto";e.target.style.height=Math.min(e.target.scrollHeight,140)+"px";$("directMessageCount").textContent=`${e.target.value.length.toLocaleString("id-ID")}/100.000`;});
 document.querySelectorAll("[data-auth-tab]").forEach(b=>b.onclick=()=>setAuthMode(b.dataset.authTab));
 document.querySelectorAll("[data-page],[data-page-go]").forEach(b=>b.onclick=()=>showPage(b.dataset.page||b.dataset.pageGo));
 $("logoutBtn").onclick=()=>signOut(auth);
 $("authForm").onsubmit=async e=>{
   e.preventDefault();
-  if(window.__sfAuthBusy)return;
   const username=$("authUsername").value.trim(), password=$("authPassword").value;
-  const submit=$("authSubmit");
-  window.__sfAuthBusy=true;
-  if(submit){submit.disabled=true;submit.dataset.oldText=submit.textContent;submit.textContent=authMode==="login"?"Memproses…":"Membuat akun…";}
   try{
     if(authMode==="register"){
       const displayName=$("authDisplayName").value.trim()||username;
       const cred=await createUserWithEmailAndPassword(auth,emailForUsername(username),password);
       await setDoc(doc(db,"users",cred.user.uid),{username,usernameLower:username.toLowerCase(),displayName,premiumUntil:null,premiumPurchases:0,isAdmin:false,banned:false,suspendedUntil:null,createdAt:serverTimestamp()});
       await setDoc(doc(db,"publicProfiles",cred.user.uid),{uid:cred.user.uid,username,usernameLower:username.toLowerCase(),displayName,updatedAt:serverTimestamp()});
-      getIdentityKeyPair().catch(err=>console.warn("identity setup:",err));
+      await getIdentityKeyPair();
       toast("Akun berhasil dibuat.");
     }else{
       await signInWithEmailAndPassword(auth,emailForUsername(username),password);
     }
-  }catch(err){
-    console.error("Authentication error:",err);
-    toast((err?.message||"Login gagal.").replace("Firebase: ",""));
-  }finally{
-    window.__sfAuthBusy=false;
-    if(submit){submit.disabled=false;submit.textContent=submit.dataset.oldText|| (authMode==="login"?"Masuk":"Buat akun");}
-  }
+  }catch(err){ toast(err.message.replace("Firebase: ","")); }
 };
 function loadActivationStatus(){
   if(!currentUser)return;
@@ -786,7 +858,7 @@ async function loadForums(){
     $("forumList").innerHTML=`<div class="notice">Gagal memuat forum: ${esc(err.message.replace("Firebase: ",""))}</div>`;
   }
 }
-const BOT_COMMANDS=["menu","help","ping","waktu","tanggal","info","forum","owner","anggota","kapasitas","sisa","status","mode","kode","bot","premium","profil","id","aturan","versi","random","angka","hitung","morse","hex","bin","base64","rot13","quote","dadu","koin","suit","8ball","tebakangka","trivia","faktorial","prima","ganjilgenap","balik","kapital","kecil","hitungkata","emoji","ascii","uptime","rawatforum","sensor","kick","hapuspesan","slowmode","lockdown"];
+const BOT_COMMANDS=["menu","help","ping","waktu","tanggal","utc","unix","info","forum","owner","anggota","kapasitas","sisa","status","mode","kode","bot","premium","profil","id","aturan","versi","random","angka","hitung","morse","hex","bin","base64","rot13","urlencode","urldecode","quote","acak","pilih","hitungkarakter","dadu","koin","suit","8ball","tebakangka","trivia","faktorial","prima","ganjilgenap","balik","kapital","kecil","hitungkata","emoji","ascii","uptime","rawatforum","sensor","kick","hapuspesan","slowmode","lockdown"];
 const botGameState = new Map();
 const BOT_START_TIME = Date.now();
 function botActiveFor(forum){return !!forum?.botCare?.enabled && premiumUntilMillis(forum.botCare.expiresAt)>Date.now();}
@@ -806,6 +878,8 @@ function botMenuText(forum){
   "#ping",
   "#waktu",
   "#tanggal",
+  "#utc",
+  "#unix",
   "#info",
   "#forum",
   "#owner",
@@ -834,6 +908,11 @@ function botMenuText(forum){
   "#bin teks",
   "#base64 teks",
   "#rot13 teks",
+  "#urlencode teks",
+  "#urldecode teks",
+  "#hitungkarakter teks",
+  "#acak teks",
+  "#pilih A | B | C",
   "#quote",
   "#faktorial angka",
   "#prima angka",
@@ -883,7 +962,7 @@ function botReply(command,forum){
   const {cmd,arg}=parsed; const members=(forum.memberIds||[]).filter(x=>x!=="BOT_CARE").length,max=forum.maxMembers||0,now=new Date();
   const basic={
     help:'Gunakan #menu untuk melihat semua perintah Bot Care.',
-    ping:'Pong! Bot Care aktif ✓',waktu:`Sekarang pukul ${now.toLocaleTimeString('id-ID')}.`,
+    ping:'Pong! Bot Care aktif ✓',waktu:`Sekarang pukul ${now.toLocaleTimeString('id-ID')}.`,utc:`UTC: ${now.toISOString().replace("T"," ").replace(/\.\d{3}Z$/,"")} `,unix:`Unix timestamp: ${Math.floor(now.getTime()/1000)}`,
     tanggal:now.toLocaleDateString('id-ID',{weekday:'long',year:'numeric',month:'long',day:'numeric'}),
     info:`Forum: ${forum.name||'Forum'}\nAnggota: ${members}/${max||'∞'}\nRole kamu: ${botRoleLabel()}`,
     forum:`Forum “${forum.name||'Forum'}” sedang dibuka.`,owner:forum.ownerId===currentUser.uid?'Kamu adalah owner forum.':`Forum dimiliki UID: ${forum.ownerId}`,
@@ -892,18 +971,11 @@ function botReply(command,forum){
     mode:forum.ownerOnly?'Hanya owner yang dapat mengirim chat.':'Semua anggota dapat mengirim chat.',kode:`Secret code: ${forum.secretCode||'tidak tersedia'}`,
     bot:botActiveFor(forum)?`Bot Care aktif sampai ${new Date(premiumUntilMillis(forum.botCare.expiresAt)).toLocaleString('id-ID')}.`:'Bot Care tidak aktif.',
     premium:'Premium: custom secret code, translator sandi, dan kapasitas sampai 400 anggota.',profil:`Nama: ${profile.displayName}\nUsername: @${profile.username}`,
-    id:`UID kamu: ${currentUser.uid}`,aturan:'Hormati anggota lain, jangan spam, dan ikuti aturan forum.',versi:'Bot Care v3.0',
+    id:`UID kamu: ${currentUser.uid}`,aturan:'Hormati anggota lain, jangan spam, dan ikuti aturan forum.',versi:'Bot Care v4.0',
     uptime:`Bot Care sudah berjalan sekitar ${Math.floor((Date.now()-BOT_START_TIME)/1000)} detik.`
   };
   if(cmd==='menu')return basic.menu=botMenuText(forum),basic.menu;
   if(basic[cmd])return basic[cmd];
-  if(cmd==='uuid')return `🆔 ${crypto.randomUUID()}`;
-  if(cmd==='password'){const n=Math.max(6,Math.min(32,Number(arg)||12));return `🔑 ${randomChars(n)}`;}
-  if(cmd==='hitungkarakter')return `🔢 ${String(arg||'').length} karakter.`;
-  if(cmd==='hitungbaris')return `📄 ${arg?String(arg).split(/\n/).length:0} baris.`;
-  if(cmd==='waktuzona'){const zone=arg||'Asia/Tokyo';try{return `🌍 ${zone}: ${new Intl.DateTimeFormat('id-ID',{dateStyle:'medium',timeStyle:'medium',timeZone:zone}).format(new Date())}`;}catch{return 'Zona waktu tidak dikenali. Contoh: #waktuzona Asia/Tokyo';}}
-  if(cmd==='cekurl'){try{const u=new URL(arg);return `🔗 ${u.protocol}//${u.host} • ${u.protocol==='https:'?'HTTPS aktif':'Bukan HTTPS'}`;}catch{return 'Format: #cekurl https://contoh.com';}}
-  if(cmd==='persen'){const p=String(arg||'').match(/^(-?\d+(?:\.\d+)?)\s+of\s+(-?\d+(?:\.\d+)?)$/i);return p?`📊 ${p[1]}% dari ${p[2]} = ${(Number(p[1])*Number(p[2])/100).toLocaleString('id-ID')}`:'Format: #persen 20 of 500';}
   if(cmd==='random')return `Angka acak: ${Math.floor(Math.random()*100000)+1}`;
   if(cmd==='angka')return arg?encodeA1Z26(arg):'Format: #angka Halo';
   if(cmd==='hitung')return arg?decodeFormula(arg):'Format: #hitung 12+5';
@@ -912,6 +984,11 @@ function botReply(command,forum){
   if(cmd==='bin')return arg?encodeBinary(arg):'Format: #bin Halo';
   if(cmd==='base64')return arg?encodeBase64(arg):'Format: #base64 Halo';
   if(cmd==='rot13')return arg?rot13(arg):'Format: #rot13 Halo';
+  if(cmd==='urlencode')return arg?encodeURIComponent(arg):'Format: #urlencode Halo dunia';
+  if(cmd==='urldecode'){try{return arg?decodeURIComponent(arg):'Format: #urldecode Halo%20dunia';}catch{return 'Format URL tidak valid.';}}
+  if(cmd==='hitungkarakter')return `Karakter: ${[...arg].length} • Byte UTF-8: ${new TextEncoder().encode(arg).length}`;
+  if(cmd==='acak'){if(!arg)return 'Format: #acak teks yang mau diacak';return [...arg].sort(()=>Math.random()-.5).join('');}
+  if(cmd==='pilih'){const choices=arg.split('|').map(x=>x.trim()).filter(Boolean);return choices.length>=2?`🎯 Pilihan: ${choices[Math.floor(Math.random()*choices.length)]}`:'Format: #pilih A | B | C';}
   if(cmd==='quote'){const q=['Tetap tenang dan lanjutkan.','Kode rahasia tetap aman.','Satu forum, satu ruang untuk berbagi.','Jangan lupa istirahat sebentar.'];return q[Math.floor(Math.random()*q.length)]}
   if(cmd==='dadu'){const maxN=Math.max(2,Math.min(1000,Number(arg)||6));return `🎲 Dadu 1-${maxN}: ${Math.floor(Math.random()*maxN)+1}`;}
   if(cmd==='koin')return Math.random()<.5?'🪙 Koin: HEADS':'🪙 Koin: TAILS';
@@ -940,9 +1017,6 @@ function userMentionToUsername(arg){return String(arg||"").trim().replace(/^@/,'
 async function executeBotCommand(command,forum,messageId){
   const parsed=normalizeBotCommand(command); if(!parsed)return null; const {cmd,arg}=parsed;
   const management= currentUser.uid===forum.ownerId || canAdmin();
-  if(cmd==='kontak'){const u=userMentionToUsername(arg);if(!u)return 'Format: #kontak @username';const t=await getUserByUsername(u);return t?`👤 ${t.displayName||t.username}\n@${t.username}`:'User tidak ditemukan.';}
-  if(cmd==='simpan'){const u=userMentionToUsername(arg);if(!u)return 'Format: #simpan @username';const t=await getUserByUsername(u);if(!t)return 'User tidak ditemukan.';await saveContact(t.id);return `📌 Kontak @${t.username} disimpan.`;}
-  if(cmd==='hapuskontak'){const u=userMentionToUsername(arg);if(!u)return 'Format: #hapuskontak @username';const t=await getUserByUsername(u);if(!t)return 'User tidak ditemukan.';await removeContact(t.id);return `🗑 Kontak @${t.username} dihapus.`;}
   if(cmd==='givepremium'){
     if(!canAdmin())return '⛔ Hanya Admin/Author yang dapat menggunakan givepremium.';
     const parts=arg.split(/\s+/).filter(Boolean), username=userMentionToUsername(parts[0]), days=Math.max(1,Math.min(3650,Number(parts[1])||7));
@@ -1103,8 +1177,7 @@ function openForum(id,data){
     const box=$("messages");
     messageTextCache.clear();
     const decryptedDocs=await Promise.all(s.docs.map(async d=>({doc:d,m:d.data(),text:await decryptForumText(d.data(),activeForum)})));
-    const renderedDocs=await Promise.all(decryptedDocs.map(async ({doc:d,m,text})=>({doc:d,m,text,attachment:await (async()=>{try{return m.attachment?await decryptForumAttachment(m.attachment,activeForum):null}catch{return {error:true}}})()})));
-    box.innerHTML=renderedDocs.map(({doc:d,m,text,attachment})=>{
+    box.innerHTML=decryptedDocs.map(({doc:d,m,text})=>{
       const me=m.uid===currentUser.uid, canDelete=me||canAdmin();
       messageTextCache.set(d.id, text||"");
       const authorBadge=m.isAuthor?roleBadgeHTML("author"):"";
@@ -1116,12 +1189,13 @@ function openForum(id,data){
       const preview=isLong?String(text||"").slice(0,500):String(text||"");
       let attachmentHTML="";
       const a=m.attachment;
-      if(a?.url){
+      if(a?.url && a.encrypted){
+        attachmentHTML=`<div class="msg-attachment encrypted-media"><button type="button" class="secondary" data-open-forum-media="${d.id}">🔐 Abrir mídia criptografada</button></div>`;
+      }else if(a?.url){
         const type=String(a.type||"");
-        if(attachment?.error) attachmentHTML=`<div class="msg-attachment file-attachment"><span>🔒</span><span>Media terenkripsi tidak dapat dibuka.</span></div>`;
-        else if(type.startsWith("image/")) attachmentHTML=`<div class="msg-attachment image-attachment"><a href="${esc(attachment?.url||a.url)}" target="_blank" rel="noopener"><img src="${esc(attachment?.url||a.url)}" alt="${esc(a.name||"Foto")}" loading="lazy"></a></div>`;
-        else if(type.startsWith("video/")) attachmentHTML=`<div class="msg-attachment video-attachment"><video controls preload="metadata" src="${esc(attachment?.url||a.url)}"></video></div>`;
-        else attachmentHTML=`<div class="msg-attachment file-attachment"><span>📎</span><a href="${esc(attachment?.url||a.url)}" target="_blank" rel="noopener" download="${esc(a.name||"file")}">${esc(a.name||"Unduh file")}</a><span class="tiny muted">${a.size?formatBytes(a.size):""}</span></div>`;
+        if(type.startsWith("image/")) attachmentHTML=`<div class="msg-attachment image-attachment"><a href="${esc(a.url)}" target="_blank" rel="noopener"><img src="${esc(a.url)}" alt="${esc(a.name||"Foto")}" loading="lazy"></a></div>`;
+        else if(type.startsWith("video/")) attachmentHTML=`<div class="msg-attachment video-attachment"><video controls preload="metadata" src="${esc(a.url)}"></video></div>`;
+        else attachmentHTML=`<div class="msg-attachment file-attachment"><span>📎</span><a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.name||"Unduh file")}</a><span class="tiny muted">${a.size?formatBytes(a.size):""}</span></div>`;
       }
       const safePreview=esc(preview).replace(/\n/g,"<br>");
       return `<div class="msg ${me?"me":""}" data-message-id="${d.id}"><div class="msg-head"><div class="msg-name">${esc(m.displayName||"User")} ${authorBadge} ${verified} ${premiumBadge}</div>${deleteButton}</div>${attachmentHTML}<div class="msg-text ${isLong?"collapsed":""}">${safePreview}</div>${isLong?`<button class="read-more" data-read-more="${d.id}" data-expanded="false">Baca selengkapnya</button>`:""}<div class="msg-tools">${translateButton}</div><div class="msg-time">${m.createdAt?.toDate?.().toLocaleString("id-ID")||"baru saja"}</div></div>`;
@@ -1161,6 +1235,19 @@ function openForum(id,data){
       msgEl.classList.toggle("collapsed",!expanded);
       btn.dataset.expanded=expanded?"false":"true";
       btn.textContent=expanded?"Baca selengkapnya":"Sembunyikan";
+    });
+    box.querySelectorAll("[data-open-forum-media]").forEach(btn=>btn.onclick=async()=>{
+      const original=btn.textContent; btn.disabled=true; btn.textContent="Membuka media…";
+      try{
+        const target=s.docs.find(x=>x.id===btn.dataset.openForumMedia);
+        if(!target?.data()?.attachment)return;
+        const media=await decryptForumAttachment(target.data().attachment,activeForum);
+        const wrap=btn.parentElement;
+        const blobUrl=URL.createObjectURL(media.blob);
+        if(String(media.type||"").startsWith("image/")) wrap.innerHTML=`<a href="${blobUrl}" target="_blank" rel="noopener"><img class="decrypted-forum-media" src="${blobUrl}" alt="${esc(media.name)}"></a>`;
+        else if(String(media.type||"").startsWith("video/")) wrap.innerHTML=`<video class="decrypted-forum-video" controls src="${blobUrl}"></video>`;
+        else wrap.innerHTML=`<a class="secondary" href="${blobUrl}" download="${esc(media.name)}">📎 ${esc(media.name)} • ${formatBytes(media.size)}</a>`;
+      }catch(err){toast("Gagal membuka media: "+err.message.replace("Firebase: ",""));btn.disabled=false;btn.textContent=original;}
     });
     box.querySelectorAll("[data-delete-message]").forEach(btn=>btn.onclick=async()=>{
       if(!activeForum)return;
@@ -1286,15 +1373,12 @@ $("messageForm").onsubmit=async e=>{
   try{
     let attachment=null;
     if(file){
-      if(CLOUDINARY_CLOUD_NAME === "YOUR_CLOUD_NAME" || CLOUDINARY_UPLOAD_PRESET === "YOUR_UNSIGNED_UPLOAD_PRESET") throw new Error("Media belum dikonfigurasi. Isi CLOUDINARY_CLOUD_NAME dan CLOUDINARY_UPLOAD_PRESET di app.js.");
-      const maxForType=25*1024*1024;
-      if(file.size>maxForType) throw new Error("Media forum terenkripsi maksimal 25 MB per kiriman.");
-      const encrypted=await encryptForumFile(file,activeForum);
-      const safeName=file.name.replace(/[^a-zA-Z0-9._-]/g,"_").slice(0,120);
-      const form=new FormData(); form.append("file",encrypted.blob,`${safeName}.enc`); form.append("upload_preset",CLOUDINARY_UPLOAD_PRESET); form.append("folder",`secret-forum/${activeForum.id}/${currentUser.uid}`);
-      const uploadRes=await fetch(CLOUDINARY_UPLOAD_URL,{method:"POST",body:form}); const uploadData=await uploadRes.json();
-      if(!uploadRes.ok||!uploadData.secure_url)throw new Error(uploadData.error?.message||"Upload media terenkripsi gagal.");
-      attachment={name:file.name,type:file.type||"application/octet-stream",size:file.size,url:uploadData.secure_url,provider:"cloudinary",publicId:uploadData.public_id||"",enc:SECURITY_VERSION,iv:encrypted.iv};
+      if(CLOUDINARY_CLOUD_NAME === "YOUR_CLOUD_NAME" || CLOUDINARY_UPLOAD_PRESET === "YOUR_UNSIGNED_UPLOAD_PRESET") throw new Error("Media belum dikonfigurasi. Isi Cloudinary di app.js.");
+      const isImage=(file.type||"").startsWith("image/");
+      const isVideo=(file.type||"").startsWith("video/");
+      const maxForType=isImage?10*1024*1024:(isVideo?100*1024*1024:10*1024*1024);
+      if(file.size>maxForType) throw new Error(isImage?"Foto maksimal 10 MB.":(isVideo?"Video maksimal 100 MB.":"File maksimal 10 MB."));
+      attachment=await encryptForumAttachment(file,activeForum);
     }
     const encryptedText=await encryptForumText(text.slice(0,MAX_MESSAGE_LENGTH),activeForum);
     await addDoc(collection(db,"forums",activeForum.id,"messages"),{uid:currentUser.uid,displayName:profile.displayName,isAdmin:profile.isAdmin===true,isAuthor:profile.isAuthor===true,premiumPurchases:Number(profile.premiumPurchases||0),...encryptedText,...(attachment?{attachment}:{}),createdAt:serverTimestamp()});
@@ -1726,19 +1810,5 @@ $("promoMonthly").onclick=()=>showPage("contact");
 onAuthStateChanged(auth,async user=>{
   currentUser=user;
   if(!user){ profile=null; activeForum=null; identityKeyPairCache=null; if(unsubscribeMessages)unsubscribeMessages(); if(unsubscribeProfile)unsubscribeProfile(); if(unsubscribeActivations)unsubscribeActivations(); if(unsubscribeInbox)unsubscribeInbox(); if(unsubscribeMaintenance)unsubscribeMaintenance(); if(unsubscribeDirectMessages)unsubscribeDirectMessages(); unsubscribeMessages=unsubscribeProfile=unsubscribeActivations=unsubscribeInbox=unsubscribeMaintenance=unsubscribeDirectMessages=null; if(promoTimer){clearInterval(promoTimer); promoTimer=null;} if(window.adTimer){clearInterval(window.adTimer);window.adTimer=null;} if(adScheduleTimeout){clearTimeout(adScheduleTimeout);adScheduleTimeout=null;} if(botExpiryTimer){clearTimeout(botExpiryTimer);botExpiryTimer=null;} $("promo")?.classList.add("hidden"); $("adModal")?.classList.add("hidden"); }
-  if(user){
-    try{
-      await loadProfile(user);
-      schedulePromo();
-      scheduleAds();
-    }catch(e){
-      console.error("Auth state/profile initialization error:",e);
-      $("appView")?.classList.add("hidden");
-      $("authView")?.classList.remove("hidden");
-      toast((e?.message||"Gagal memuat akun.").replace("Firebase: ",""));
-    }
-  }else{
-    $("appView")?.classList.add("hidden");
-    $("authView")?.classList.remove("hidden");
-  }
+  if(user){try{await loadProfile(user);schedulePromo();scheduleAds()}catch(e){toast(e.message)}}else{$("appView").classList.add("hidden");$("authView").classList.remove("hidden");}
 });
