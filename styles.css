@@ -76,3 +76,42 @@ textarea{width:100%;resize:none;min-height:42px;max-height:150px;overflow-y:auto
 
 /* v25: Bot Care command center */
 .bot-menu-modal{position:fixed;inset:0;z-index:10001;display:grid;place-items:center;padding:18px;background:rgba(2,6,14,.78);backdrop-filter:blur(12px);overflow:auto}.bot-menu-card{width:min(760px,96vw);max-height:90vh;overflow:auto;border:1px solid rgba(120,150,220,.22);border-radius:26px;background:linear-gradient(145deg,#101a2d,#080f1d);box-shadow:0 30px 100px rgba(0,0,0,.62);padding:20px}.bot-menu-top{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}.bot-menu-top h2{margin:4px 0 5px}.bot-menu-top p{margin:0}.bot-status-card{display:flex;align-items:center;gap:10px;margin:16px 0;padding:12px 14px;border-radius:14px;background:rgba(77,216,255,.055);border:1px solid rgba(77,216,255,.16)}.bot-status-card small{display:block;color:#8fa1ba;margin-top:2px}.bot-live-dot{width:10px;height:10px;border-radius:50%;background:#57e0a2;box-shadow:0 0 14px rgba(87,224,162,.75)}.bot-command-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.bot-command-group{display:flex;gap:11px;padding:14px;border-radius:16px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08)}.bot-command-group h3{margin:0 0 6px;font-size:13px}.bot-command-group p{margin:0;color:#aebbd0;font-size:10px;line-height:1.65}.bot-command-group small{display:block;margin-top:8px;color:#8fa1ba;font-size:9px;line-height:1.45}.bot-group-icon{width:34px;height:34px;flex:0 0 34px;display:grid;place-items:center;border-radius:11px;background:rgba(124,92,255,.12);font-size:17px}.bot-management-group{border-color:rgba(87,224,162,.14)}.bot-menu-tip{display:flex;gap:8px;align-items:center;margin-top:12px;padding:12px 14px;border-radius:14px;background:rgba(124,92,255,.08);border:1px solid rgba(124,92,255,.15);font-size:10px}.bot-menu-tip span{color:#aebbd0}.bot-menu-tip code{padding:2px 5px;border-radius:5px;background:rgba(255,255,255,.08);color:#d8d1ff}@media(max-width:650px){.bot-menu-card{padding:16px;border-radius:22px}.bot-command-grid{grid-template-columns:1fr}.bot-menu-tip{align-items:flex-start;flex-direction:column}.forum-actions{flex-wrap:wrap}.forum-actions button{flex:1}}
+
+/* Appearance controls - added without changing existing forum features */
+.appearance-card{margin-top:4px;padding:18px;border:1px solid var(--line);border-radius:18px;background:var(--panel2)}
+.appearance-head h3{margin:4px 0 6px}
+.appearance-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-top:16px;margin-top:16px;border-top:1px solid var(--line)}
+.appearance-label{font-weight:700}
+.theme-toggle{display:flex;gap:8px;flex-wrap:wrap}
+.theme-choice{padding:9px 13px;border-radius:12px;background:var(--panel);border:1px solid var(--line);color:var(--text);transition:.18s}
+.theme-choice.active{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 5px 16px rgba(0,0,0,.12)}
+.color-picker{display:flex;gap:10px;flex-wrap:wrap}
+.color-choice{width:34px;height:34px;padding:3px;border-radius:50%;background:transparent;border:2px solid transparent;display:grid;place-items:center}
+.color-choice span{display:block;width:24px;height:24px;border-radius:50%;background:var(--swatch);box-shadow:inset 0 0 0 1px rgba(0,0,0,.12)}
+.color-choice.active{border-color:var(--text);box-shadow:0 0 0 2px var(--panel2)}
+.color-choice[data-accent="whatsapp"]{--swatch:#25d366}
+.color-choice[data-accent="blue"]{--swatch:#2196f3}
+.color-choice[data-accent="purple"]{--swatch:#7c5cff}
+.color-choice[data-accent="pink"]{--swatch:#e91e63}
+.color-choice[data-accent="orange"]{--swatch:#ff9800}
+
+/* Light theme */
+html[data-theme="light"]{
+  --bg:#f0f2f5;
+  --panel:#ffffff;
+  --panel2:#f7f8fa;
+  --text:#17202a;
+  --muted:#667781;
+  --line:#dfe5e8;
+  --danger:#e5484d;
+}
+html[data-theme="light"] body{
+  background:linear-gradient(180deg,#e9edef 0%,#f0f2f5 45%,#f0f2f5 100%);
+}
+html[data-theme="light"] .glass{box-shadow:0 8px 30px rgba(15,23,42,.08)}
+html[data-theme="light"] input,
+html[data-theme="light"] select,
+html[data-theme="light"] textarea{background:#fff;color:var(--text);border-color:var(--line)}
+html[data-theme="light"] .nav:hover,
+html[data-theme="light"] .nav.active{background:rgba(37,211,102,.10)}
+html[data-theme="light"] .muted{color:var(--muted)}

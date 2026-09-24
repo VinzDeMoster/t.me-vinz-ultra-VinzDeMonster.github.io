@@ -18,6 +18,49 @@ const firebaseConfig = {
   measurementId: "G-N98GMJHYED"
 };
 
+
+/* Local appearance preferences. This only controls visual theme/color and does not
+   touch Firebase data or any existing forum feature. */
+(function initAppearance(){
+  const savedTheme=localStorage.getItem("sf_theme")||"dark";
+  const savedAccent=localStorage.getItem("sf_accent")||"whatsapp";
+  const accents={
+    whatsapp:["#25d366","#128c7e"],
+    blue:["#2196f3","#42a5f5"],
+    purple:["#7c5cff","#4dd8ff"],
+    pink:["#e91e63","#f06292"],
+    orange:["#ff9800","#ffb74d"]
+  };
+  const apply=()=>{
+    document.documentElement.dataset.theme=localStorage.getItem("sf_theme")||"dark";
+    const a=accents[localStorage.getItem("sf_accent")||"whatsapp"]||accents.whatsapp;
+    document.documentElement.style.setProperty("--accent",a[0]);
+    document.documentElement.style.setProperty("--accent2",a[1]);
+  };
+  apply();
+  window.addEventListener("DOMContentLoaded",()=>{
+    document.querySelectorAll("[data-theme-choice]").forEach(btn=>{
+      btn.onclick=()=>{
+        localStorage.setItem("sf_theme",btn.dataset.themeChoice);
+        apply(); syncAppearanceUI();
+      };
+    });
+    document.querySelectorAll("[data-accent]").forEach(btn=>{
+      btn.onclick=()=>{
+        localStorage.setItem("sf_accent",btn.dataset.accent);
+        apply(); syncAppearanceUI();
+      };
+    });
+    syncAppearanceUI();
+  });
+  window.syncAppearanceUI=()=>{
+    const theme=localStorage.getItem("sf_theme")||"dark";
+    const accent=localStorage.getItem("sf_accent")||"whatsapp";
+    document.querySelectorAll("[data-theme-choice]").forEach(x=>x.classList.toggle("active",x.dataset.themeChoice===theme));
+    document.querySelectorAll("[data-accent]").forEach(x=>x.classList.toggle("active",x.dataset.accent===accent));
+  };
+})();
+
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
