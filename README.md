@@ -49,13 +49,10 @@ Bot Care menyediakan 51 perintah untuk informasi, utilitas, game, dan perawatan 
 - Deploy ulang **firestore.rules** setelah memakai ZIP ini.
 
 
-## v27 — WhatsApp-style private chat + E2E media
-- Private chat redesigned with a WhatsApp Web-inspired two-pane layout.
-- Mobile view switches between chat list and active conversation.
-- Private messages support encrypted photos, videos, and files before Cloudinary upload.
-- Private contact cards can be sent using saved username-based contacts.
-- Forum media sent after this version is encrypted in the browser before upload.
-- Long private messages over 100 characters use a WhatsApp-style "Baca selengkapnya" control.
-- Bot Care adds: `#utc`, `#unix`, `#urlencode`, `#urldecode`, `#hitungkarakter`, `#acak`, and `#pilih`.
-- Existing forum, Firebase, Premium, Admin, Author, theme, language, and moderation features are retained.
-- Deploy the included `firestore.rules` if your Firebase project is not already using the current rules.
+## v27 — Private Chat UI + Media + Contact + Bot Care
+- Private chat redesigned to use the same forum-style chat layout.
+- Direct messages support encrypted photos, videos and files.
+- Private contact cards can be sent inside encrypted chats.
+- Long private messages keep the WhatsApp-style Read more behavior.
+- Added Bot Care commands: #groupinfo, #admins, #tagall/#hidetag, and #say.
+- Existing Firebase/forum/admin/author/premium features are retained.
