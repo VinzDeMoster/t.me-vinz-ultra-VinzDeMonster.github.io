@@ -161,63 +161,37 @@
       </section>
 
       <section id="page-private" class="page hidden">
-        <div class="private-chat-shell">
-          <div class="forum-head glass private-forum-head">
-            <button class="icon" data-page-go="home">←</button>
-            <div class="private-title-wrap">
-              <span class="eyebrow">PRIVATE CHAT</span>
-              <h2 id="directChatTitle">Pesan pribadi</h2>
-              <p id="directChatSubtitle" class="muted">Cari username atau pilih kontak untuk mulai chat.</p>
+        <div class="private-layout">
+          <div class="form-card glass private-contacts-panel">
+            <div class="section-head">
+              <div><span class="eyebrow">PRIVATE CHAT</span><h2>Pesan pribadi</h2><p class="muted">Kirim pesan langsung menggunakan username, tanpa masuk forum.</p></div>
+              <button id="refreshPrivateBtn" class="secondary" type="button">Refresh</button>
             </div>
-            <div class="forum-actions">
-              <button id="privateContactsBtn" class="secondary" type="button">👤 Kontak</button>
-              <button id="refreshPrivateBtn" class="secondary" type="button">↻ Refresh</button>
-              <span id="directSecurityBadge" class="security-badge">🔒 Terenkripsi</span>
-            </div>
-          </div>
-
-          <div id="privateTools" class="private-tools glass hidden">
-            <div class="private-tools-grid">
-              <form id="privateSearchForm" class="private-search">
-                <input id="privateSearchInput" placeholder="Cari username" autocomplete="off" required>
-                <button class="primary" type="submit">Cari</button>
-              </form>
-              <div id="privateSearchResult"></div>
-            </div>
-            <div class="private-tool-columns">
-              <div>
-                <div class="section-head"><h3>Kontak tersimpan</h3></div>
-                <div id="contactList" class="contact-list"><div class="notice">Belum ada kontak.</div></div>
-              </div>
-              <div>
-                <div class="section-head"><h3>Percakapan</h3></div>
-                <div id="directChatList" class="contact-list"><div class="notice">Belum ada percakapan.</div></div>
-              </div>
-            </div>
+            <form id="privateSearchForm" class="private-search">
+              <input id="privateSearchInput" placeholder="Cari username" autocomplete="off" required>
+              <button class="primary" type="submit">Cari</button>
+            </form>
+            <div id="privateSearchResult"></div>
+            <div class="section-head" style="margin-top:18px"><h3>Kontak tersimpan</h3><button id="addCurrentContactBtn" class="secondary hidden" type="button">Simpan</button></div>
+            <div id="contactList" class="contact-list"><div class="notice">Belum ada kontak.</div></div>
+            <div class="section-head" style="margin-top:18px"><h3>Percakapan</h3></div>
+            <div id="directChatList" class="contact-list"><div class="notice">Belum ada percakapan.</div></div>
             <div class="security-card">
               <span class="security-icon">🔐</span>
-              <div><b>Keamanan pesan</b><p class="tiny muted">Pesan teks, kontak, foto, video, dan file pada chat pribadi baru dienkripsi di perangkat sebelum disimpan.</p></div>
+              <div><b>Keamanan pesan</b><p class="tiny muted">Pesan pribadi baru dienkripsi di perangkat sebelum disimpan ke Firestore menggunakan Web Crypto (ECDH + AES-GCM).</p></div>
             </div>
           </div>
-
-          <div id="directMessages" class="messages glass private-messages">
-            <div class="notice">Pilih pengguna untuk mulai percakapan.</div>
+          <div class="form-card glass private-chat-panel">
+            <div class="private-chat-head">
+              <div><span class="eyebrow">DIRECT MESSAGE</span><h2 id="directChatTitle">Pilih percakapan</h2><p id="directChatSubtitle" class="muted">Cari username atau pilih kontak untuk mulai chat.</p></div>
+              <span id="directSecurityBadge" class="security-badge hidden">🔒 Terenkripsi</span>
+            </div>
+            <div id="directMessages" class="direct-messages"><div class="notice">Belum ada percakapan yang dipilih.</div></div>
+            <form id="directMessageForm" class="composer glass locked">
+              <div class="composer-main"><textarea id="directMessageInput" maxlength="100000" rows="1" placeholder="Tulis pesan pribadi..." disabled autocomplete="off"></textarea><div class="composer-meta"><span id="directMessageCount" class="tiny muted">0/100.000</span></div></div>
+              <div class="composer-actions"><button class="primary send-btn" type="submit" disabled>Kirim</button></div>
+            </form>
           </div>
-
-          <form id="directMessageForm" class="composer glass locked">
-            <div class="composer-main">
-              <textarea id="directMessageInput" maxlength="100000" rows="1" placeholder="Tulis pesan..." disabled autocomplete="off"></textarea>
-              <div class="composer-meta">
-                <span id="directMessageCount" class="tiny muted">0/100.000</span>
-                <span id="directAttachmentName" class="tiny muted"></span>
-              </div>
-            </div>
-            <div class="composer-actions">
-              <button id="directContactBtn" class="secondary attach-btn" type="button" title="Kirim kontak" disabled>👤</button>
-              <label class="attach-btn" title="Kirim foto, video, atau file">📎<input id="directMessageAttachment" type="file" accept="image/*,video/*,.pdf,.zip,.rar,.txt,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.apk" hidden disabled></label>
-              <button class="primary send-btn" type="submit" disabled>Kirim</button>
-            </div>
-          </form>
         </div>
       </section>
 
@@ -306,14 +280,7 @@
 
   <div id="maintenanceModal" class="maintenance-modal hidden" role="dialog" aria-modal="true" aria-label="Maintenance"><div class="maintenance-card"><div class="maintenance-glow"></div><img id="maintenanceImage" class="maintenance-image hidden" src="" alt="Maintenance"><div class="maintenance-icon">🛠️</div><span class="eyebrow">SYSTEM NOTICE</span><h2>Website Sedang Maintenance</h2><p id="maintenanceMessage">Untuk sementara waktu website ini tidak dapat digunakan.</p><div class="maintenance-line"></div><small>Silakan kembali lagi nanti. Admin dan Author tetap dapat mengakses website.</small></div></div>
 
-  <div id="botMenuModal" class="bot-menu-modal hidden" role="dialog" aria-modal="true" aria-label="Bot Care"><div class="bot-menu-card"><div class="bot-menu-top"><div><span class="eyebrow">BOT CARE</span><h2>🤖 Pusat Bot Care</h2><p class="muted">55 perintah untuk informasi, game, utilitas, dan perawatan forum.</p></div><button id="botMenuClose" class="icon" type="button">×</button></div><div class="bot-status-card"><span class="bot-live-dot"></span><div><b>Bot Care</b><small id="botMenuStatus">Siap membantu</small></div></div><div class="bot-command-grid"><div class="bot-command-group"><span class="bot-group-icon">📌</span><div><h3>Informasi</h3><p>#help · #ping · #waktu · #tanggal · #info · #forum · #owner · #anggota · #kapasitas · #sisa · #status · #mode · #kode · #bot · #premium · #profil · #id · #aturan · #versi · #groupinfo · #admins · #tagall · #say teks · #uptime</p></div></div><div class="bot-command-group"><span class="bot-group-icon">🧩</span><div><h3>Utilitas</h3><p>#random · #angka · #hitung · #morse · #hex · #bin · #base64 · #rot13 · #quote · #faktorial · #prima · #ganjilgenap · #balik · #kapital · #kecil · #hitungkata · #emoji · #ascii</p></div></div><div class="bot-command-group"><span class="bot-group-icon">🎮</span><div><h3>Game</h3><p>#dadu · #koin · #suit · #8ball · #tebakangka · #trivia</p></div></div><div class="bot-command-group bot-management-group"><span class="bot-group-icon">🛡️</span><div><h3>Perawatan Forum</h3><p>#rawatforum on/off · #sensor on/off · #kick @username · #hapuspesan terakhir · #slowmode 10/off · #lockdown on/off</p><small>Fitur moderasi mengikuti hak akses Owner/Admin/Author.</small></div></div></div><div class="bot-menu-tip"><b>💡 Contoh</b><span>Ketik <code>#menu</code> di chat untuk menampilkan menu ini sebagai balasan Bot Care.</span></div></div></div>  <div id="privateContactModal" class="ad-modal hidden" role="dialog" aria-modal="true" aria-label="Pilih kontak">
-    <div class="contact-picker-card">
-      <div class="ad-top"><span class="eyebrow">KIRIM KONTAK</span><button id="privateContactModalClose" class="ad-close" type="button">×</button></div>
-      <p class="muted">Pilih kontak username yang ingin kamu kirim di chat.</p>
-      <div id="privateContactPickerList" class="contact-picker-list"><div class="notice">Belum ada kontak.</div></div>
-    </div>
-  </div>
-<div id="adModal" class="ad-modal hidden" role="dialog" aria-modal="true" aria-label="Iklan"><div class="ad-card"><div class="ad-top"><span class="eyebrow">IKLAN</span><button id="adClose" class="ad-close" disabled>Tutup (5s)</button></div><img id="adImage" class="ad-image" src="" alt="Iklan"><div class="ad-content"><h3 id="adTitle">Iklan</h3><p id="adBody" class="muted"></p></div></div></div>
+  <div id="botMenuModal" class="bot-menu-modal hidden" role="dialog" aria-modal="true" aria-label="Bot Care"><div class="bot-menu-card"><div class="bot-menu-top"><div><span class="eyebrow">BOT CARE</span><h2>🤖 Pusat Bot Care</h2><p class="muted">51 perintah untuk informasi, game, utilitas, dan perawatan forum.</p></div><button id="botMenuClose" class="icon" type="button">×</button></div><div class="bot-status-card"><span class="bot-live-dot"></span><div><b>Bot Care</b><small id="botMenuStatus">Siap membantu</small></div></div><div class="bot-command-grid"><div class="bot-command-group"><span class="bot-group-icon">📌</span><div><h3>Informasi</h3><p>#help · #ping · #waktu · #tanggal · #info · #forum · #owner · #anggota · #kapasitas · #sisa · #status · #mode · #kode · #bot · #premium · #profil · #id · #aturan · #versi · #uptime</p></div></div><div class="bot-command-group"><span class="bot-group-icon">🧩</span><div><h3>Utilitas</h3><p>#random · #angka · #hitung · #morse · #hex · #bin · #base64 · #rot13 · #quote · #faktorial · #prima · #ganjilgenap · #balik · #kapital · #kecil · #hitungkata · #emoji · #ascii</p></div></div><div class="bot-command-group"><span class="bot-group-icon">🎮</span><div><h3>Game</h3><p>#dadu · #koin · #suit · #8ball · #tebakangka · #trivia</p></div></div><div class="bot-command-group bot-management-group"><span class="bot-group-icon">🛡️</span><div><h3>Perawatan Forum</h3><p>#rawatforum on/off · #sensor on/off · #kick @username · #hapuspesan terakhir · #slowmode 10/off · #lockdown on/off</p><small>Fitur moderasi mengikuti hak akses Owner/Admin/Author.</small></div></div></div><div class="bot-menu-tip"><b>💡 Contoh</b><span>Ketik <code>#menu</code> di chat untuk menampilkan menu ini sebagai balasan Bot Care.</span></div></div></div><div id="adModal" class="ad-modal hidden" role="dialog" aria-modal="true" aria-label="Iklan"><div class="ad-card"><div class="ad-top"><span class="eyebrow">IKLAN</span><button id="adClose" class="ad-close" disabled>Tutup (5s)</button></div><img id="adImage" class="ad-image" src="" alt="Iklan"><div class="ad-content"><h3 id="adTitle">Iklan</h3><p id="adBody" class="muted"></p></div></div></div>
 
   <script type="module" src="app.js"></script>
 </body>
