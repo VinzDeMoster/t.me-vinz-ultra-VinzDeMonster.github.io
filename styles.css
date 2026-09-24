@@ -150,3 +150,34 @@ a{color:var(--accent)}
 .code,.activation-code{color:var(--accent)}
 textarea:focus,input:focus,select:focus{border-color:var(--accent)!important;box-shadow:0 0 0 3px var(--accent-soft)}
 .progress,.progress-bar{background:var(--accent)}
+
+/* v26: WhatsApp-style read-more placement */
+.msg{display:flex;flex-direction:column}
+.msg-head{order:0}
+.msg-text{order:1}
+.read-more{order:2;align-self:flex-start}
+.msg-tools{order:3}
+.msg-time{order:4}
+.msg-text.collapsed{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:8;overflow:hidden;max-height:11.6em}
+.read-more{margin-top:7px;padding:0;border:0;background:transparent;color:var(--accent2);font-size:12px;font-weight:800;cursor:pointer;text-align:left}
+.read-more:hover{text-decoration:underline}
+.private-layout{display:grid;grid-template-columns:minmax(280px,360px) minmax(0,1fr);gap:14px;align-items:stretch}
+.private-contacts-panel,.private-chat-panel{min-width:0}
+.private-search{display:flex;gap:8px;margin-top:14px}.private-search input{flex:1;min-width:0}
+.contact-list{display:grid;gap:8px;margin-top:10px;max-height:32vh;overflow:auto}
+.contact-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px;border:1px solid var(--line);border-radius:13px;background:rgba(255,255,255,.035)}
+.contact-main{min-width:0}.contact-main b,.contact-main span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.contact-actions{display:flex;gap:6px}.contact-actions button{padding:6px 9px}
+.private-chat-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px}
+.security-badge{display:inline-flex;align-items:center;gap:5px;padding:7px 10px;border-radius:999px;background:rgba(37,211,102,.1);border:1px solid rgba(37,211,102,.25);font-size:11px;font-weight:800;white-space:nowrap}
+.security-card{display:flex;gap:10px;margin-top:16px;padding:12px;border:1px solid rgba(37,211,102,.18);border-radius:14px;background:rgba(37,211,102,.045)}
+.security-card p{margin:4px 0 0}.security-icon{font-size:20px}
+.direct-messages{height:calc(100vh - 330px);min-height:350px;overflow:auto;padding:12px;border-radius:16px;background:var(--chat-bg,#0b1220)}
+.direct-msg{max-width:78%;padding:10px 13px;border-radius:15px;background:#162238;margin:7px 0;display:flex;flex-direction:column}
+.direct-msg.me{margin-left:auto;background:linear-gradient(135deg,#332d69,#233c68)}
+.direct-msg .direct-text{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.45}
+.direct-msg .direct-time{font-size:9px;color:#73839c;margin-top:4px}
+@media(max-width:900px){.private-layout{grid-template-columns:1fr}.private-contacts-panel{max-height:none}.direct-messages{height:50vh;min-height:300px}}
+@media(max-width:600px){.private-search{display:grid;grid-template-columns:1fr}.private-search button{width:100%}.private-chat-head{flex-direction:column}}
+
+.direct-text.collapsed{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:8;overflow:hidden;max-height:11.6em}.direct-read-more{align-self:flex-start!important}

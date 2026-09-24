@@ -1,4 +1,4 @@
-# Secret Forum — v18
+# Secret Forum — v26
 
 Fitur lama dipertahankan. Perbaikan/tambahan:
 - Panel translator bawah forum dihapus; terjemahan tetap tersedia melalui tombol pada pesan Premium/Admin/Author dan mengganti teks langsung di tempat.
@@ -36,3 +36,14 @@ Upload dilakukan langsung dari browser ke Cloudinary. Jangan memasukkan API Secr
 
 ## Bot Care v3
 Bot Care menyediakan 51 perintah untuk informasi, utilitas, game, dan perawatan forum. Perintah manajemen seperti `#rawatforum on`, `#sensor on`, `#kick @username`, `#hapuspesan terakhir`, `#slowmode 10`, dan `#lockdown on` mengikuti hak akses Owner/Admin/Author. `#rawatforum on` menjalankan pemeriksaan otomatis terhadap kata terlarang pada pesan dan dapat mengeluarkan akun biasa/Premium yang terdeteksi melanggar; Owner Forum tetap dilindungi.
+
+## v26 — Chat pribadi, keamanan pesan, dan pengaturan forum
+- Tombol **Baca selengkapnya** sekarang muncul setelah isi pesan dan aktif mulai lebih dari 100 karakter; preview menampilkan lebih banyak teks dan bisa dibuka/tutup seperti chat modern.
+- Ditambahkan menu **Pesan pribadi** untuk chat berdasarkan username tanpa masuk forum.
+- Ditambahkan **Kontak** berbasis username, tanpa nomor telepon.
+- Pesan pribadi baru menggunakan Web Crypto **ECDH + AES-GCM**: isi pesan dienkripsi di perangkat pengirim dan hanya perangkat dua anggota chat yang memiliki kunci untuk membukanya.
+- Pesan forum baru juga disimpan dalam bentuk terenkripsi **AES-GCM**, dengan kunci yang diturunkan dari secret code + ID forum. Pesan lama yang masih plaintext tetap dapat dibaca.
+- Admin dan Author mendapatkan **Pengaturan forum** untuk mengubah nama forum, kapasitas (tidak boleh di bawah jumlah anggota saat ini), owner-only, dan filter kata.
+- `firestore.rules` ditambahkan untuk `publicProfiles`, `publicKeys`, `contacts`, dan `directChats`.
+- Lampiran forum/Cloudinary tetap memakai sistem lama agar fitur media yang sudah ada tidak berubah.
+- Deploy ulang **firestore.rules** setelah memakai ZIP ini.

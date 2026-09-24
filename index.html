@@ -45,6 +45,7 @@
         <button class="nav" data-page="create">＋ <span>Buat Forum</span></button>
         <button class="nav" data-page="settings">⚙ <span>Pengaturan</span></button>
         <button class="nav" data-page="inbox">✉ <span>Inbox</span><span id="inboxBadge" class="inbox-badge hidden">0</span></button>
+        <button class="nav" data-page="private">💬 <span>Pesan pribadi</span></button>
         <button class="nav" data-page="contact">✦ <span>Premium</span></button>
         <button class="nav hidden" id="adminNav" data-page="admin">♛ <span>Admin</span></button>
         <button class="nav hidden" id="authorNav" data-page="author">👑 <span>Author</span></button>
@@ -159,6 +160,41 @@
         </div>
       </section>
 
+      <section id="page-private" class="page hidden">
+        <div class="private-layout">
+          <div class="form-card glass private-contacts-panel">
+            <div class="section-head">
+              <div><span class="eyebrow">PRIVATE CHAT</span><h2>Pesan pribadi</h2><p class="muted">Kirim pesan langsung menggunakan username, tanpa masuk forum.</p></div>
+              <button id="refreshPrivateBtn" class="secondary" type="button">Refresh</button>
+            </div>
+            <form id="privateSearchForm" class="private-search">
+              <input id="privateSearchInput" placeholder="Cari username" autocomplete="off" required>
+              <button class="primary" type="submit">Cari</button>
+            </form>
+            <div id="privateSearchResult"></div>
+            <div class="section-head" style="margin-top:18px"><h3>Kontak tersimpan</h3><button id="addCurrentContactBtn" class="secondary hidden" type="button">Simpan</button></div>
+            <div id="contactList" class="contact-list"><div class="notice">Belum ada kontak.</div></div>
+            <div class="section-head" style="margin-top:18px"><h3>Percakapan</h3></div>
+            <div id="directChatList" class="contact-list"><div class="notice">Belum ada percakapan.</div></div>
+            <div class="security-card">
+              <span class="security-icon">🔐</span>
+              <div><b>Keamanan pesan</b><p class="tiny muted">Pesan pribadi baru dienkripsi di perangkat sebelum disimpan ke Firestore menggunakan Web Crypto (ECDH + AES-GCM).</p></div>
+            </div>
+          </div>
+          <div class="form-card glass private-chat-panel">
+            <div class="private-chat-head">
+              <div><span class="eyebrow">DIRECT MESSAGE</span><h2 id="directChatTitle">Pilih percakapan</h2><p id="directChatSubtitle" class="muted">Cari username atau pilih kontak untuk mulai chat.</p></div>
+              <span id="directSecurityBadge" class="security-badge hidden">🔒 Terenkripsi</span>
+            </div>
+            <div id="directMessages" class="direct-messages"><div class="notice">Belum ada percakapan yang dipilih.</div></div>
+            <form id="directMessageForm" class="composer glass locked">
+              <div class="composer-main"><textarea id="directMessageInput" maxlength="100000" rows="1" placeholder="Tulis pesan pribadi..." disabled autocomplete="off"></textarea><div class="composer-meta"><span id="directMessageCount" class="tiny muted">0/100.000</span></div></div>
+              <div class="composer-actions"><button class="primary send-btn" type="submit" disabled>Kirim</button></div>
+            </form>
+          </div>
+        </div>
+      </section>
+
       <section id="page-contact" class="page hidden">
         <div class="form-card glass narrow">
           <span class="eyebrow">PREMIUM</span><h2>Upgrade Premium</h2>
@@ -190,6 +226,7 @@
           <div class="form-card glass"><h3>Kelola user</h3><form id="userSearchForm"><input id="userSearch" placeholder="Cari username"><button class="secondary wide">Cari</button></form><div id="userResults"></div></div>
           <div class="form-card glass"><span class="eyebrow">USER MONITOR</span><h3>Pantau seluruh user</h3><p class="muted">Lihat nama, username, role, status, dan forum yang diikuti. Password tidak dapat dilihat karena Firebase Authentication menyimpan password secara aman.</p><button class="secondary wide" id="refreshUserMonitor" type="button">Muat seluruh user</button><div id="userMonitorResults"></div></div>
           <div class="form-card glass"><h3>Moderasi forum</h3><form id="forumModerationForm"><input id="moderationCode" placeholder="Secret code forum"><select id="forumModerationMode"><option value="ban">Ban forum</option><option value="unban">Unban forum</option><option value="suspend">Suspend forum</option><option value="unsuspend">Unsuspend forum</option></select><input id="forumSuspendHours" type="number" min="1" value="24" placeholder="Jam suspend"><button class="secondary wide">Terapkan</button></form><p class="tiny muted">Ban/suspend forum memblokir akses anggota. Admin tetap dapat mengaksesnya.</p></div>
+          <div class="form-card glass"><span class="eyebrow">FORUM SETTINGS</span><h3>Pengaturan forum</h3><p class="muted">Admin dan Author dapat mengubah nama, kapasitas, mode owner-only, dan filter kata forum.</p><form id="adminForumSettingsForm"><input id="adminForumSettingsCode" placeholder="Secret code forum" required><input id="adminForumSettingsName" placeholder="Nama forum" maxlength="60" required><input id="adminForumSettingsMax" type="number" min="2" value="20" placeholder="Maks. anggota" required><label class="check-row"><input id="adminForumSettingsOwnerOnly" type="checkbox"> Hanya owner yang dapat mengirim</label><label class="check-row"><input id="adminForumSettingsProfanity" type="checkbox"> Aktifkan filter kata</label><button class="secondary wide" type="submit">Simpan pengaturan forum</button></form></div>
           <div class="form-card glass"><h3>Berikan / cabut Premium</h3><form id="premiumForm"><input id="premiumUsername" placeholder="Username"><div class="two"><select id="premiumMode"><option value="grant">Berikan Premium</option><option value="revoke">Jadikan Biasa</option></select><input id="premiumDays" type="number" min="1" value="7" placeholder="Hari"></div><button class="primary wide">Terapkan</button></form><p class="tiny muted">Admin/Author dapat mengelola Premium tanpa batas fitur.</p></div>
           <div class="form-card glass"><span class="eyebrow">PREMIUM CUSTOM</span><h3>Buat kode aktivasi Premium</h3><p class="muted">Admin dapat membuat kode sendiri. Kode harus tepat 20 karakter.</p><form id="customActivationForm"><input id="customActivationUsername" placeholder="Username penerima" required><input id="customActivationCode" placeholder="Kode custom 20 karakter" minlength="20" maxlength="20" required><div class="two"><label class="check-row"><input id="customActivationUnlimited" type="checkbox"> Durasi tak terbatas</label><input id="customActivationDays" type="number" min="1" value="30" placeholder="Hari"></div><button class="secondary wide">Buat & Kirim Kode</button></form></div>
           <div class="form-card glass"><span class="eyebrow">INBOX</span><h3>Kirim pesan ke user</h3><p class="muted">Kirim pemberitahuan langsung ke Inbox akun.</p><form id="adminInboxForm"><input id="adminInboxUsername" placeholder="Username penerima" required><input id="adminInboxSubject" placeholder="Judul pesan" maxlength="100" required><textarea id="adminInboxMessage" rows="4" maxlength="1000" placeholder="Isi pemberitahuan..." required></textarea><button class="secondary wide">Kirim ke Inbox</button></form></div>
@@ -204,6 +241,7 @@
         <div class="admin-grid">
           <div class="form-card glass"><span class="eyebrow">AUTHOR ONLY</span><h3>Kelola user & role</h3><form id="authorUserSearchForm"><input id="authorUserSearch" placeholder="Cari username" required><button class="secondary wide">Cari</button></form><div id="authorUserResults"></div></div>
           <div class="form-card glass"><span class="eyebrow">AUTHOR ONLY • USER MONITOR</span><h3>Pantau seluruh user</h3><p class="muted">Detail aktivitas forum per user. Password tidak pernah ditampilkan karena Firebase Authentication tidak menyediakan plaintext password.</p><button class="primary wide" id="refreshAuthorUserMonitor" type="button">Muat seluruh user</button><div id="authorUserMonitorResults"></div></div>
+          <div class="form-card glass"><span class="eyebrow">AUTHOR ONLY • FORUM SETTINGS</span><h3>Pengaturan forum</h3><p class="muted">Ubah nama, kapasitas, owner-only, dan filter kata forum.</p><form id="authorForumSettingsForm"><input id="authorForumSettingsCode" placeholder="Secret code forum" required><input id="authorForumSettingsName" placeholder="Nama forum" maxlength="60" required><input id="authorForumSettingsMax" type="number" min="2" value="20" placeholder="Maks. anggota" required><label class="check-row"><input id="authorForumSettingsOwnerOnly" type="checkbox"> Hanya owner yang dapat mengirim</label><label class="check-row"><input id="authorForumSettingsProfanity" type="checkbox"> Aktifkan filter kata</label><button class="primary wide" type="submit">Simpan pengaturan forum</button></form></div>
           <div class="form-card glass"><span class="eyebrow">AUTHOR ONLY</span><h3>Hapus forum</h3><p class="muted">Hapus forum secara permanen beserta pesan, anggota, dan secret code.</p><form id="authorDeleteForumForm"><input id="authorDeleteForumCode" placeholder="Secret code forum" required><button class="secondary wide">Hapus forum permanen</button></form></div>
           <div class="form-card glass"><span class="eyebrow">INBOX</span><h3>Kirim pesan ke user</h3><p class="muted">Author dapat mengirim pengumuman atau pemberitahuan ke Inbox user.</p><form id="authorInboxForm"><input id="authorInboxUsername" placeholder="Username penerima" required><input id="authorInboxSubject" placeholder="Judul pesan" maxlength="100" required><textarea id="authorInboxMessage" rows="4" maxlength="1000" placeholder="Isi pemberitahuan..." required></textarea><button class="primary wide">Kirim ke Inbox</button></form></div>
           <div class="form-card glass"><span class="eyebrow">PREMIUM CUSTOM</span><h3>Buat kode aktivasi Premium</h3><p class="muted">Author dapat membuat kode sendiri dengan durasi tak terbatas.</p><form id="authorCustomActivationForm"><input id="authorCustomActivationUsername" placeholder="Username penerima" required><input id="authorCustomActivationCode" placeholder="Kode custom 20 karakter" minlength="20" maxlength="20" required><div class="two"><label class="check-row"><input id="authorCustomActivationUnlimited" type="checkbox" checked> Durasi tak terbatas</label><input id="authorCustomActivationDays" type="number" min="1" value="30" placeholder="Hari"></div><button class="primary wide">Buat & Kirim Kode</button></form></div>
