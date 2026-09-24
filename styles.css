@@ -181,3 +181,22 @@ textarea:focus,input:focus,select:focus{border-color:var(--accent)!important;box
 @media(max-width:600px){.private-search{display:grid;grid-template-columns:1fr}.private-search button{width:100%}.private-chat-head{flex-direction:column}}
 
 .direct-text.collapsed{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:8;overflow:hidden;max-height:11.6em}.direct-read-more{align-self:flex-start!important}
+
+
+/* v5: Private chat uses the same message/composer UI as forum */
+.direct-messages{height:calc(100vh - 330px);min-height:350px;overflow:auto;padding:18px;border-radius:18px;background:var(--chat-bg,#0b1220)}
+.direct-msg{max-width:75%;padding:10px 13px;border-radius:15px;background:#162238;margin:7px 0;display:block}
+.direct-msg.me{margin-left:auto;background:linear-gradient(135deg,#332d69,#233c68)}
+.direct-msg .msg-name{font-size:10px;font-weight:800;color:#9db1ff;margin-bottom:3px;display:flex;align-items:center;gap:4px}
+.direct-msg .direct-text{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.45}
+.direct-msg .direct-time{font-size:9px;color:#73839c;margin-top:4px}
+.direct-msg .read-more{display:inline-block}
+.direct-msg .msg-attachment{margin-top:9px}
+.direct-msg .image-attachment img{display:block;width:min(360px,100%);max-height:420px;object-fit:cover;border-radius:12px}
+.direct-msg .video-attachment video{display:block;width:min(420px,100%);max-height:420px;border-radius:12px;background:#000}
+.direct-msg .file-attachment{display:flex;align-items:center;gap:8px;padding:10px 11px;border:1px solid var(--line);border-radius:11px;background:rgba(8,14,26,.45);overflow-wrap:anywhere}
+.direct-msg .file-attachment a{color:#b9c8ff;font-weight:700;text-decoration:none}
+.direct-msg .file-attachment a:hover{text-decoration:underline}
+#directMessageForm .attach-btn{width:40px;height:40px;border-radius:12px}
+@media(max-width:900px){.direct-messages{height:50vh;min-height:300px}}
+@media(max-width:600px){.direct-msg{max-width:88%}.direct-messages{padding:12px}}

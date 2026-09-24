@@ -47,3 +47,9 @@ Bot Care menyediakan 51 perintah untuk informasi, utilitas, game, dan perawatan 
 - `firestore.rules` ditambahkan untuk `publicProfiles`, `publicKeys`, `contacts`, dan `directChats`.
 - Lampiran forum/Cloudinary tetap memakai sistem lama agar fitur media yang sudah ada tidak berubah.
 - Deploy ulang **firestore.rules** setelah memakai ZIP ini.
+
+
+## v5 private chat UI/media
+- Private chat composer and message bubbles now match the forum UI.
+- Private chats support image, video, and file attachments through the existing Cloudinary upload configuration.
+- Text messages remain end-to-end encrypted with the existing Web Crypto flow.

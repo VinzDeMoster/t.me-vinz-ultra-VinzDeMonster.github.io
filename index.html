@@ -186,10 +186,10 @@
               <div><span class="eyebrow">DIRECT MESSAGE</span><h2 id="directChatTitle">Pilih percakapan</h2><p id="directChatSubtitle" class="muted">Cari username atau pilih kontak untuk mulai chat.</p></div>
               <span id="directSecurityBadge" class="security-badge hidden">🔒 Terenkripsi</span>
             </div>
-            <div id="directMessages" class="direct-messages"><div class="notice">Belum ada percakapan yang dipilih.</div></div>
+            <div id="directMessages" class="messages glass direct-messages"><div class="notice">Belum ada percakapan yang dipilih.</div></div>
             <form id="directMessageForm" class="composer glass locked">
-              <div class="composer-main"><textarea id="directMessageInput" maxlength="100000" rows="1" placeholder="Tulis pesan pribadi..." disabled autocomplete="off"></textarea><div class="composer-meta"><span id="directMessageCount" class="tiny muted">0/100.000</span></div></div>
-              <div class="composer-actions"><button class="primary send-btn" type="submit" disabled>Kirim</button></div>
+              <div class="composer-main"><textarea id="directMessageInput" maxlength="100000" rows="1" placeholder="Tulis pesan pribadi..." disabled autocomplete="off"></textarea><div class="composer-meta"><span id="directMessageCount" class="tiny muted">0/100.000</span><span id="directAttachmentName" class="tiny muted"></span></div></div>
+              <div class="composer-actions"><label class="attach-btn" title="Kirim foto, video, atau file">📎<input id="directMessageAttachment" type="file" accept="image/*,video/*,.pdf,.zip,.rar,.txt,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.apk" hidden disabled></label><button class="primary send-btn" type="submit" disabled>Kirim</button></div>
             </form>
           </div>
         </div>
