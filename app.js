@@ -62,7 +62,7 @@ const firebaseConfig = {
 })();
 
 
-/* v2 language support */
+/* v3 complete language engine */
 (function initLanguage(){
 const T={
 id:{'Beranda':'Beranda','Bergabung Forum':'Bergabung Forum','Buat Forum':'Buat Forum','Pengaturan':'Pengaturan','Inbox':'Inbox','Premium':'Premium','Aktivitas':'Aktivitas','Keluar':'Keluar','Login':'Login','Daftar':'Daftar','Username':'Username','Password':'Password','Nama tampilan':'Nama tampilan','Masuk':'Masuk','Forum saya':'Forum saya','Masuk ke forum':'Masuk ke forum','Masukkan secret code':'Masukkan secret code','Buat forum baru':'Buat forum baru','Jumlah anggota':'Jumlah anggota','Secret code':'Secret code','Simpan nama':'Simpan nama','Status akun':'Status akun','Aktivasi Premium':'Aktivasi Premium','Tampilan & warna':'Tampilan & warna','Mode':'Mode','Terang':'Terang','Gelap':'Gelap','Warna utama':'Warna utama','Bahasa website':'Bahasa website','Ganti password':'Ganti password','Upgrade Premium':'Upgrade Premium','Beli Sekarang':'Beli Sekarang','Kirim':'Kirim','Salin kode':'Salin kode','Detail forum':'Detail forum','Hanya owner':'Hanya owner','Keluar forum':'Keluar forum','Tulis pesan...':'Tulis pesan...'},
@@ -71,8 +71,104 @@ ja:{'Beranda':'ホーム','Bergabung Forum':'フォーラムに参加','Buat For
 ko:{'Beranda':'홈','Bergabung Forum':'포럼 참여','Buat Forum':'포럼 만들기','Pengaturan':'설정','Inbox':'받은편지함','Premium':'프리미엄','Aktivitas':'활동','Keluar':'로그아웃','Login':'로그인','Daftar':'가입','Username':'사용자 이름','Password':'비밀번호','Nama tampilan':'표시 이름','Masuk':'로그인','Forum saya':'내 포럼','Masuk ke forum':'포럼 참여','Masukkan secret code':'비밀 코드 입력','Buat forum baru':'새 포럼 만들기','Jumlah anggota':'회원 수','Secret code':'비밀 코드','Simpan nama':'이름 저장','Status akun':'계정 상태','Aktivasi Premium':'프리미엄 활성화','Tampilan & warna':'화면 및 색상','Mode':'모드','Terang':'라이트','Gelap':'다크','Warna utama':'주 색상','Bahasa website':'웹사이트 언어','Ganti password':'비밀번호 변경','Upgrade Premium':'프리미엄 업그레이드','Beli Sekarang':'지금 구매','Kirim':'보내기','Salin kode':'코드 복사','Detail forum':'포럼 상세','Hanya owner':'소유자만','Keluar forum':'포럼 나가기','Tulis pesan...':'메시지를 입력하세요...'},
 zh:{'Beranda':'首页','Bergabung Forum':'加入论坛','Buat Forum':'创建论坛','Pengaturan':'设置','Inbox':'收件箱','Premium':'高级版','Aktivitas':'活动','Keluar':'退出登录','Login':'登录','Daftar':'注册','Username':'用户名','Password':'密码','Nama tampilan':'显示名称','Masuk':'登录','Forum saya':'我的论坛','Masuk ke forum':'进入论坛','Masukkan secret code':'输入密钥','Buat forum baru':'创建新论坛','Jumlah anggota':'成员上限','Secret code':'密钥','Simpan nama':'保存名称','Status akun':'账户状态','Aktivasi Premium':'高级版激活','Tampilan & warna':'外观和颜色','Mode':'模式','Terang':'浅色','Gelap':'深色','Warna utama':'主题颜色','Bahasa website':'网站语言','Ganti password':'修改密码','Upgrade Premium':'升级高级版','Beli Sekarang':'立即购买','Kirim':'发送','Salin kode':'复制代码','Detail forum':'论坛详情','Hanya owner':'仅所有者','Keluar forum':'退出论坛','Tulis pesan...':'输入消息...'},
 es:{'Beranda':'Inicio','Bergabung Forum':'Unirse al foro','Buat Forum':'Crear foro','Pengaturan':'Configuración','Inbox':'Bandeja de entrada','Premium':'Premium','Aktivitas':'Actividad','Keluar':'Cerrar sesión','Login':'Iniciar sesión','Daftar':'Registrarse','Username':'Usuario','Password':'Contraseña','Nama tampilan':'Nombre visible','Masuk':'Entrar','Forum saya':'Mis foros','Masuk ke forum':'Entrar al foro','Masukkan secret code':'Introduce el código secreto','Buat forum baru':'Crear nuevo foro','Jumlah anggota':'Límite de miembros','Secret code':'Código secreto','Simpan nama':'Guardar nombre','Status akun':'Estado de la cuenta','Aktivasi Premium':'Activación Premium','Tampilan & warna':'Apariencia y colores','Mode':'Modo','Terang':'Claro','Gelap':'Oscuro','Warna utama':'Color principal','Bahasa website':'Idioma del sitio','Ganti password':'Cambiar contraseña','Upgrade Premium':'Mejorar a Premium','Beli Sekarang':'Comprar ahora','Kirim':'Enviar','Salin kode':'Copiar código','Detail forum':'Detalles del foro','Hanya owner':'Solo propietario','Keluar forum':'Salir del foro','Tulis pesan...':'Escribe un mensaje...'}};
-function apply(){const lang=localStorage.getItem('sf_language')||'id',m=T[lang]||T.id;document.documentElement.lang=lang;const w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);const a=[];while(w.nextNode())a.push(w.currentNode);for(const n of a){const x=n.nodeValue.trim();if(m[x]&&n.parentElement&&!n.parentElement.closest('script,style'))n.nodeValue=n.nodeValue.replace(x,m[x]);}document.querySelectorAll('input,textarea').forEach(e=>{if(e.placeholder&&m[e.placeholder])e.placeholder=m[e.placeholder]});const s=document.getElementById('languageSelect');if(s)s.value=lang;}
-window.sfSetLanguage=l=>{localStorage.setItem('sf_language',l);apply()};window.sfTranslate=apply;window.addEventListener('DOMContentLoaded',()=>{const s=document.getElementById('languageSelect');if(s)s.onchange=()=>sfSetLanguage(s.value);apply()});})();
+
+/* Extended language packs and additional UI phrases */
+Object.assign(T, {"fr":{"Beranda":"Accueil","Bergabung Forum":"Rejoindre le forum","Buat Forum":"Créer un forum","Pengaturan":"Paramètres","Inbox":"Boîte de réception","Premium":"Premium","Aktivitas":"Activité","Keluar":"Se déconnecter","Login":"Connexion","Daftar":"S’inscrire","Username":"Nom d’utilisateur","Password":"Mot de passe","Nama tampilan":"Nom affiché","Masuk":"Se connecter","Forum saya":"Mes forums","Masuk ke forum":"Rejoindre un forum","Masukkan secret code":"Entrer le code secret","Buat forum baru":"Créer un nouveau forum","Jumlah anggota":"Limite de membres","Secret code":"Code secret","Simpan nama":"Enregistrer le nom","Status akun":"Statut du compte","Aktivasi Premium":"Activation Premium","Tampilan & warna":"Apparence et couleurs","Mode":"Mode","Terang":"Clair","Gelap":"Sombre","Warna utama":"Couleur principale","Bahasa website":"Langue du site","Ganti password":"Changer le mot de passe","Upgrade Premium":"Passer à Premium","Beli Sekarang":"Acheter maintenant","Kirim":"Envoyer","Salin kode":"Copier le code","Detail forum":"Détails du forum","Hanya owner":"Propriétaire uniquement","Keluar forum":"Quitter le forum","Tulis pesan...":"Écrire un message..."},"de":{"Beranda":"Startseite","Bergabung Forum":"Forum beitreten","Buat Forum":"Forum erstellen","Pengaturan":"Einstellungen","Inbox":"Posteingang","Premium":"Premium","Aktivitas":"Aktivität","Keluar":"Abmelden","Login":"Anmelden","Daftar":"Registrieren","Username":"Benutzername","Password":"Passwort","Nama tampilan":"Anzeigename","Masuk":"Einloggen","Forum saya":"Meine Foren","Masuk ke forum":"Forum beitreten","Masukkan secret code":"Geheimcode eingeben","Buat forum baru":"Neues Forum erstellen","Jumlah anggota":"Mitgliederlimit","Secret code":"Geheimcode","Simpan nama":"Namen speichern","Status akun":"Kontostatus","Aktivasi Premium":"Premium-Aktivierung","Tampilan & warna":"Darstellung & Farben","Mode":"Modus","Terang":"Hell","Gelap":"Dunkel","Warna utama":"Akzentfarbe","Bahasa website":"Website-Sprache","Ganti password":"Passwort ändern","Upgrade Premium":"Premium upgraden","Beli Sekarang":"Jetzt kaufen","Kirim":"Senden","Salin kode":"Code kopieren","Detail forum":"Forumdetails","Hanya owner":"Nur Eigentümer","Keluar forum":"Forum verlassen","Tulis pesan...":"Nachricht eingeben..."},"pt":{"Beranda":"Início","Bergabung Forum":"Entrar no fórum","Buat Forum":"Criar fórum","Pengaturan":"Configurações","Inbox":"Caixa de entrada","Premium":"Premium","Aktivitas":"Atividade","Keluar":"Sair","Login":"Entrar","Daftar":"Cadastrar","Username":"Nome de usuário","Password":"Senha","Nama tampilan":"Nome de exibição","Masuk":"Entrar","Forum saya":"Meus fóruns","Masuk ke forum":"Entrar em um fórum","Masukkan secret code":"Digite o código secreto","Buat forum baru":"Criar novo fórum","Jumlah anggota":"Limite de membros","Secret code":"Código secreto","Simpan nama":"Salvar nome","Status akun":"Status da conta","Aktivasi Premium":"Ativação Premium","Tampilan & warna":"Aparência e cores","Mode":"Modo","Terang":"Claro","Gelap":"Escuro","Warna utama":"Cor principal","Bahasa website":"Idioma do site","Ganti password":"Alterar senha","Upgrade Premium":"Fazer upgrade para Premium","Beli Sekarang":"Comprar agora","Kirim":"Enviar","Salin kode":"Copiar código","Detail forum":"Detalhes do fórum","Hanya owner":"Somente proprietário","Keluar forum":"Sair do fórum","Tulis pesan...":"Digite uma mensagem..."}});
+const EXTRA={"Forum privat dengan kode akses.":{"en":"Private forum with an access code.","ja":"アクセスコード付きのプライベートフォーラムです。","ko":"접근 코드가 있는 비공개 포럼입니다.","zh":"带访问密钥的私人论坛。","es":"Foro privado con código de acceso。"},"Kelola forum rahasiamu.":{"en":"Manage your private forums.","ja":"プライベートフォーラムを管理します。","ko":"비공개 포럼을 관리하세요.","zh":"管理你的私人论坛。","es":"Gestiona tus foros privados。"},"Forum rahasia, sederhana, dan nyaman.":{"en":"Private, simple, and comfortable forum.","ja":"プライベートでシンプル、快適なフォーラムです。","ko":"비공개로 간단하고 편안한 포럼입니다.","zh":"私密、简单、舒适的论坛。","es":"Foro privado, sencillo y cómodo。"},"Gabung Forum":{"en":"Join Forum","ja":"フォーラムに参加","ko":"포럼 참여","zh":"加入论坛","es":"Unirse al foro"},"Nama forum":{"en":"Forum name","ja":"フォーラム名","ko":"포럼 이름","zh":"论坛名称","es":"Nombre del foro"},"Pengaturan akun":{"en":"Account settings","ja":"アカウント設定","ko":"계정 설정","zh":"账户设置","es":"Configuración de la cuenta"},"Username (tidak bisa diubah)":{"en":"Username (cannot be changed)","ja":"ユーザー名（変更不可）","ko":"사용자 이름（변경할 수 없음）","zh":"用户名（无法修改）","es":"Usuario (no se puede cambiar)"},"Akun biasa":{"en":"Standard account","ja":"通常アカウント","ko":"일반 계정","zh":"普通账户","es":"Cuenta estándar"},"Pilih bahasa yang digunakan pada tampilan website.":{"en":"Choose the language used throughout the website.","ja":"ウェブサイトで使用する言語を選択してください。","ko":"웹사이트에서 사용할 언어를 선택하세요.","zh":"选择网站界面使用的语言。","es":"Elige el idioma que se usará en el sitio web。"},"Password baru":{"en":"New password","ja":"新しいパスワード","ko":"새 비밀번호","zh":"新密码","es":"Nueva contraseña"},"Buka Admin Panel":{"en":"Open Admin Panel","ja":"管理パネルを開く","ko":"관리자 패널 열기","zh":"打开管理面板","es":"Abrir panel de administración"},"Belum ada pesan.":{"en":"No messages yet.","ja":"まだメッセージはありません。","ko":"아직 메시지가 없습니다.","zh":"暂无消息。","es":"Aún no hay mensajes。"},"Pilih paket Premium yang kamu inginkan.":{"en":"Choose the Premium plan you want.","ja":"希望するプレミアムプランを選択してください。","ko":"원하는 프리미엄 요금제를 선택하세요.","zh":"选择你想要的高级版套餐。","es":"Elige el plan Premium que quieras。"},"Saya Sudah Bayar":{"en":"I Have Paid","ja":"支払い済みです","ko":"결제했습니다","zh":"我已付款","es":"Ya he pagado"},"Kembali":{"en":"Back","ja":"戻る","ko":"뒤로","zh":"返回","es":"Volver"},"Memproses pembayaran…":{"en":"Processing payment…","ja":"支払いを処理中…","ko":"결제를 처리하는 중…","zh":"正在处理付款…","es":"Procesando el pago…"},"Aktivitas Forum":{"en":"Forum Activity","ja":"フォーラムのアクティビティ","ko":"포럼 활동","zh":"论坛活动","es":"Actividad del foro"},"Refresh":{"en":"Refresh","ja":"更新","ko":"새로고침","zh":"刷新","es":"Actualizar"},"Belum dimuat.":{"en":"Not loaded yet.","ja":"まだ読み込まれていません。","ko":"아직 로드되지 않았습니다.","zh":"尚未加载。","es":"Aún no cargado。"},"Permintaan Premium":{"en":"Premium Requests","ja":"プレミアム申請","ko":"프리미엄 요청","zh":"高级版申请","es":"Solicitudes Premium"},"Kelola user":{"en":"Manage users","ja":"ユーザー管理","ko":"사용자 관리","zh":"管理用户","es":"Gestionar usuarios"},"Cari":{"en":"Search","ja":"検索","ko":"검색","zh":"搜索","es":"Buscar"},"Moderasi forum":{"en":"Forum moderation","ja":"フォーラムのモデレーション","ko":"포럼 관리","zh":"论坛管理","es":"Moderación del foro"},"Ban forum":{"en":"Ban forum","ja":"フォーラムをBAN","ko":"포럼 차단","zh":"封禁论坛","es":"Bloquear foro"},"Unban forum":{"en":"Unban forum","ja":"フォーラムのBAN解除","ko":"포럼 차단 해제","zh":"解除论坛封禁","es":"Desbloquear foro"},"Suspend forum":{"en":"Suspend forum","ja":"フォーラムを停止","ko":"포럼 일시 정지","zh":"暂停论坛","es":"Suspender foro"},"Unsuspend forum":{"en":"Unsuspend forum","ja":"フォーラムの停止を解除","ko":"포럼 정지 해제","zh":"解除论坛暂停","es":"Reactivar foro"},"Terapkan":{"en":"Apply","ja":"適用","ko":"적용","zh":"应用","es":"Aplicar"},"Berikan Premium":{"en":"Grant Premium","ja":"プレミアムを付与","ko":"프리미엄 부여","zh":"授予高级版","es":"Conceder Premium"},"Jadikan Biasa":{"en":"Make Standard","ja":"通常に戻す","ko":"일반 계정으로 변경","zh":"设为普通账户","es":"Cambiar a estándar"},"Buat & Kirim Kode":{"en":"Create & Send Code","ja":"コードを作成して送信","ko":"코드 생성 및 전송","zh":"创建并发送代码","es":"Crear y enviar código"},"Kirim ke Inbox":{"en":"Send to Inbox","ja":"受信トレイに送信","ko":"받은편지함으로 보내기","zh":"发送到收件箱","es":"Enviar a la bandeja de entrada"},"Pasang iklan":{"en":"Place an ad","ja":"広告を掲載","ko":"광고 게시","zh":"投放广告","es":"Publicar anuncio"},"Terbitkan iklan":{"en":"Publish ad","ja":"広告を公開","ko":"광고 게시하기","zh":"发布广告","es":"Publicar anuncio"},"Masukkan Bot Care":{"en":"Add Bot Care","ja":"Bot Careを追加","ko":"Bot Care 추가","zh":"添加 Bot Care","es":"Añadir Bot Care"},"Keluarkan Bot Care":{"en":"Remove Bot Care","ja":"Bot Careを削除","ko":"Bot Care 제거","zh":"移除 Bot Care","es":"Quitar Bot Care"},"Maintenance website":{"en":"Website maintenance","ja":"ウェブサイトメンテナンス","ko":"웹사이트 점검","zh":"网站维护","es":"Mantenimiento del sitio web"},"Aktifkan Maintenance":{"en":"Enable Maintenance","ja":"メンテナンスを有効化","ko":"점검 모드 활성화","zh":"启用维护模式","es":"Activar mantenimiento"},"Hapus forum permanen":{"en":"Delete forum permanently","ja":"フォーラムを完全に削除","ko":"포럼 영구 삭제","zh":"永久删除论坛","es":"Eliminar foro permanentemente"},"Refresh aktivitas":{"en":"Refresh activity","ja":"アクティビティを更新","ko":"활동 새로고침","zh":"刷新活动","es":"Actualizar actividad"},"Detail forum":{"en":"Forum details","ja":"フォーラム詳細","ko":"포럼 세부정보","zh":"论坛详情","es":"Detalles del foro"},"Keluar forum":{"en":"Leave forum","ja":"フォーラムを退出","ko":"포럼 나가기","zh":"退出论坛","es":"Salir del foro"},"Website Sedang Maintenance":{"en":"Website Under Maintenance","ja":"ウェブサイトはメンテナンス中です","ko":"웹사이트 점검 중","zh":"网站正在维护","es":"Sitio web en mantenimiento"},"Untuk sementara waktu website ini tidak dapat digunakan.":{"en":"This website is temporarily unavailable.","ja":"現在、このウェブサイトは一時的に利用できません。","ko":"현재 이 웹사이트를 일시적으로 사용할 수 없습니다.","zh":"该网站暂时无法使用。","es":"Este sitio web no está disponible temporalmente。"},"Pusat Bot Care":{"en":"Bot Care Center","ja":"Bot Careセンター","ko":"Bot Care 센터","zh":"Bot Care 中心","es":"Centro de Bot Care"},"Siap membantu":{"en":"Ready to help","ja":"いつでもサポートします","ko":"도울 준비가 되었습니다","zh":"随时为你提供帮助","es":"Listo para ayudar"},"Informasi":{"en":"Information","ja":"情報","ko":"정보","zh":"信息","es":"信息"},"Utilitas":{"en":"Utilities","ja":"ユーティリティ","ko":"유틸리티","zh":"实用工具","es":"Utilidades"},"Game":{"en":"Games","ja":"ゲーム","ko":"게임","zh":"游戏","es":"Juegos"},"Perawatan Forum":{"en":"Forum care","ja":"フォーラム管理","ko":"포럼 관리","zh":"论坛维护","es":"Mantenimiento del foro"},"Salin kode":{"en":"Copy code","ja":"コードをコピー","ko":"코드 복사","zh":"复制代码","es":"Copiar código"},"Hanya owner":{"en":"Owner only","ja":"オーナーのみ","ko":"소유자만","zh":"仅限所有者","es":"Solo propietario"}};
+for(const [key,vals] of Object.entries(EXTRA)){
+  for(const [lang,value] of Object.entries(vals)){
+    if(T[lang]) T[lang][key]=value;
+  }
+}
+/* French/German/Portuguese use the existing core dictionary above; extra UI phrases
+   are translated where provided and never overwrite user-generated forum content. */
+
+const allTextMap={};
+for(const [lang,dict] of Object.entries(T)){for(const [key,value] of Object.entries(dict)){if(value && !allTextMap[value]) allTextMap[value]=key;}}
+const nodeSource=new WeakMap();
+let applying=false;
+function canonicalText(raw){
+  const trimmed=raw.trim();
+  if(!trimmed) return null;
+  return allTextMap[trimmed] || trimmed;
+}
+function translateText(raw,dict){
+  const lead=(raw.match(/^\s*/) || [''])[0];
+  const trail=(raw.match(/\s*$/) || [''])[0];
+  const trimmed=raw.trim();
+  const key=nodeSource.get(translateText._node) || canonicalText(trimmed);
+  const translated=dict[key];
+  if(translated) return lead+translated+trail;
+  return raw;
+}
+function shouldSkip(node){
+  const p=node.parentElement;
+  return !p || p.closest('script,style,noscript,textarea,input,select,[data-no-translate],.messages,.message-list,.chat-messages');
+}
+function apply(){
+  if(applying) return;
+  applying=true;
+  try{
+    const lang=localStorage.getItem('sf_language')||'id';
+    const dict=T[lang]||T.id;
+    document.documentElement.lang=lang;
+    const w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);
+    const nodes=[];
+    while(w.nextNode()) nodes.push(w.currentNode);
+    for(const n of nodes){
+      if(shouldSkip(n)) continue;
+      const raw=n.nodeValue;
+      const trimmed=raw.trim();
+      if(!trimmed) continue;
+      let key=nodeSource.get(n);
+      if(!key) key=canonicalText(trimmed);
+      if(dict[key] && trimmed!==dict[key]){
+        const lead=(raw.match(/^\s*/) || [''])[0];
+        const trail=(raw.match(/\s*$/) || [''])[0];
+        n.nodeValue=lead+dict[key]+trail;
+      }
+      nodeSource.set(n,key);
+    }
+    document.querySelectorAll('input,textarea').forEach(e=>{
+      const attr=e.placeholder||'';
+      const key=canonicalText(attr);
+      if(dict[key]) e.placeholder=dict[key];
+    });
+    document.querySelectorAll('[title],[aria-label]').forEach(e=>{
+      for(const attr of ['title','aria-label']){
+        const value=e.getAttribute(attr);
+        if(!value) continue;
+        const key=canonicalText(value);
+        if(dict[key]) e.setAttribute(attr,dict[key]);
+      }
+    });
+    const s=document.getElementById('languageSelect');
+    if(s) s.value=lang;
+  }finally{applying=false;}
+}
+window.sfLocalizeRuntime=(msg)=>{
+  const lang=localStorage.getItem('sf_language')||'id',dict=T[lang]||T.id;
+  let out=String(msg??'');
+  const keys=Object.keys(allTextMap).sort((a,b)=>b.length-a.length);
+  for(const shown of keys){
+    const key=allTextMap[shown];
+    if(dict[key] && dict[key]!==key && out.includes(shown)) out=out.split(shown).join(dict[key]);
+  }
+  return out;
+};
+window.sfSetLanguage=l=>{if(T[l]){localStorage.setItem('sf_language',l);apply();}};
+window.sfTranslate=apply;
+window.addEventListener('DOMContentLoaded',()=>{
+  const s=document.getElementById('languageSelect');
+  if(s) s.onchange=()=>sfSetLanguage(s.value);
+  apply();
+  const observer=new MutationObserver(mutations=>{
+    if(mutations.some(m=>m.type==='childList')) apply();
+  });
+  observer.observe(document.body,{subtree:true,childList:true});
+});
+})();
+;
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -107,7 +203,7 @@ const actorRole = () => isAuthor() ? "Author" : (profile?.isAdmin ? "Admin" : "U
 async function logActivity(type,message,extra={}){if(!currentUser||!profile)return;try{await addDoc(collection(db,"activityLogs"),{type,message,actorId:currentUser.uid,actorName:profile.displayName,actorUsername:profile.username,actorRole:actorRole(),createdAt:serverTimestamp(),...extra});}catch(e){console.warn("activity log:",e);}}
 const roleBadgeHTML = role => role === "author" ? '<span class="role-badge author">AUTHOR</span>' : role === "admin" ? '<span class="role-badge admin">ADMIN</span>' : '';
 
-const toast = (msg,duration=2500) => { $("toast").textContent = msg; $("toast").classList.add("show"); setTimeout(()=>$("toast").classList.remove("show"),duration); };
+const toast = (msg,duration=2500) => { $("toast").textContent = window.sfLocalizeRuntime ? window.sfLocalizeRuntime(msg) : msg; $("toast").classList.add("show"); setTimeout(()=>$("toast").classList.remove("show"),duration); };
 const copyText = async (text) => { try { if(navigator.clipboard?.writeText) { await navigator.clipboard.writeText(String(text)); return true; } } catch(e) {} try { const ta=document.createElement("textarea"); ta.value=String(text); ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta); ta.select(); const ok=document.execCommand("copy"); ta.remove(); return ok; } catch(e) { return false; } };
 const esc = s => String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));
 const premiumUntilMillis = value => {
